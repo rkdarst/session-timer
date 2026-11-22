@@ -22,7 +22,9 @@ Phases 1–4 are implemented and verified:
   the admin page embeds a live preview of the display page in an
   iframe (`?embed=1`), which mirrors the text size a display browser
   last chose (`PUT /api/{name}/font-scale`, presentation-only — no
-  generation bump; included in state payloads and snapshots)
+  generation bump; included in state payloads and snapshots); the same
+  pattern carries the room-dim level (`PUT /api/{name}/dim`, steps up
+  to 90% black) with darker/lighter buttons on both pages
 - `tests/test_store.py`, `tests/test_api.py` — 49 tests, all passing
 - Verified live with uvicorn: pages 200, 409 on stale generation, CSV
   round-trip, WebSocket initial state + push + ping/pong

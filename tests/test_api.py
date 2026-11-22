@@ -100,6 +100,7 @@ def test_state_empty_session_does_not_create(client):
         "generation": None,
         "anchor": None,
         "font_scale": 1.0,
+        "dim_level": 0.0,
         "events": [],
     }
     assert store.get(NAME) is None  # read-only path never creates
@@ -278,6 +279,7 @@ def test_pages_served(client):
     for path, marker in [
         (f"/{NAME}/", "events-table"),
         (f"/{NAME}/", "preview-frame"),
+        (f"/{NAME}/", ">Gap</th>"),
         (f"/{NAME}/display", 'id="timer"'),
     ]:
         resp = client.get(path)
@@ -293,6 +295,7 @@ def test_websocket_initial_state_and_push(client):
             "generation": None,
             "anchor": None,
             "font_scale": 1.0,
+            "dim_level": 0.0,
             "events": [],
         }
 
@@ -339,3 +342,28 @@ def test_font_scale_never_creates_session(client):
         == 404
     )
     assert store.get("nowhere-session") is None
+
+
+def test_dim_level_syncs_without_generation_change(client):
+    client.post(f"/api/{NAME}/anchor", json={"anchor": 1700000000})
+    before = client.get(f"/api/{NAME}/state").json()["generation"]
+    r = client.put(f"/api/{NAME}/dim", json={"level": 0.5})
+    assert r.status_code == 200
+    assert r.json()["dim_level"] == 0.5
+    state = client.get(f"/api/{NAME}/state").json()
+    assert state["dim_level"] == 0.5
+    # presentation-only: schedule generation is untouched (displays
+    # don't track it, so requiring one would break them)
+    assert state["generation"] == before
+    # validation: below 0, above the 90% cap, and non-numeric
+    assert client.put(f"/api/{NAME}/dim", json={"level": -0.1}).status_code == 400
+    assert client.put(f"/api/{NAME}/dim", json={"level": 0.95}).status_code == 400
+    assert client.put(f"/api/{NAME}/dim", json={"level": "dark"}).status_code == 422
+    # boundary: exactly 0 and 0.9 are fine
+    assert client.put(f"/api/{NAME}/dim", json={"level": 0}).status_code == 200
+    assert client.put(f"/api/{NAME}/dim", json={"level": 0.9}).status_code == 200
+
+
+def test_dim_never_creates_session(client):
+    assert client.put("/api/nobody-home/dim", json={"level": 0.3}).status_code == 404
+    assert store.get("nobody-home") is None

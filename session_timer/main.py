@@ -142,6 +142,7 @@ def empty_state(name: str) -> dict:
         "generation": None,
         "anchor": None,
         "font_scale": 1.0,
+        "dim_level": 0.0,
         "events": [],
     }
 
@@ -233,6 +234,10 @@ class FontScaleIn(BaseModel):
     scale: float
 
 
+class DimIn(BaseModel):
+    level: float
+
+
 # --------------------------------------------------------------- pages
 
 
@@ -297,6 +302,26 @@ async def put_font_scale(name: str, body: FontScaleIn):
         raise HTTPException(status_code=404, detail="unknown session")
     try:
         session.set_font_scale(body.scale)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await broadcast_state(name, session)
+
+
+@app.put("/api/{name}/dim")
+async def put_dim(name: str, body: DimIn):
+    """Sync the room-dimming level (0 = off, 0.9 = 90% black).
+
+    Like the font scale this is presentation, not schedule state: no
+    generation is sent or bumped, and a nonexistent session is a 404.
+    Displays and admin pages both PUT here; every panel gets the change
+    via the state broadcast.
+    """
+    check_name(name)
+    session = store.get(name)
+    if session is None:
+        raise HTTPException(status_code=404, detail="unknown session")
+    try:
+        session.set_dim_level(body.level)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return await broadcast_state(name, session)

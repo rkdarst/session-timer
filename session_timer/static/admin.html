@@ -22,9 +22,11 @@
     +/- delays later events
   </label>
   <iframe id="preview-frame" title="Live preview of the display page"></iframe>
+  <button id="dim-darker" title="Dim the display screens (synced to every panel)">☾</button>
+  <button id="dim-lighter" title="Brighten the display screens (synced to every panel)">☀</button>
   <span style="flex: 1"></span>
-  <a id="display-link" href="" target="_blank" rel="noopener" title="Open the read-only display page in a new tab">Display page</a>
-  <button id="show-qr" title="Show a QR code linking to the display page">QR code</button>
+  <a id="display-link" href="" target="_blank" rel="noopener" title="Open the read-only display page in a new tab">Display</a>
+  <button id="show-qr" title="Show a QR code linking to the display page">Display QR</button>
   <button id="download-csv">Download CSV</button>
   <button id="upload-csv-btn">Upload CSV</button>
   <input type="file" id="upload-csv" accept=".csv,text/csv" hidden>
@@ -39,6 +41,7 @@
       <th>Duration (s)</th>
       <th></th>
       <th>End</th>
+      <th title="Time between this event's end and the next event's start (negative when they overlap; blank for the last event)">Gap</th>
       <th title="Countdown for the event currently shown on the display page (blank for all other events)">Remaining</th>
       <th></th>
     </tr>

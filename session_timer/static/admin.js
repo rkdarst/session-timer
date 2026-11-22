@@ -86,6 +86,7 @@
       anchorEnsured = true;
       ensureAnchor();
     }
+    updateDimButtons();
     renderTable();
   }
 
@@ -192,7 +193,8 @@
     const events = sortedEvents();
     const overlaps = overlapIds(events);
     tbody.textContent = "";
-    for (const ev of events) {
+    for (let i = 0; i < events.length; i++) {
+      const ev = events[i];
       const tr = document.createElement("tr");
       tr.dataset.eid = ev.id;
       if (overlaps.has(ev.id)) tr.classList.add("overlap");
@@ -203,6 +205,7 @@
       tr.appendChild(makeInput(ev, "duration", String(ev.duration), "number"));
       tr.appendChild(makeStepButtons(ev, "duration", 60));
       tr.appendChild(makeReadonlyCell(ST.fmtServiceTime(ev.start_time + ev.duration)));
+      tr.appendChild(makeGapCell(ev, events[i + 1] || null));
       tr.appendChild(makeRemainingCell());
       tr.appendChild(makeDeleteButton(ev));
       tbody.appendChild(tr);
@@ -284,6 +287,21 @@
     return td;
   }
 
+  /** Gap between this event's end and the next event's start (in the
+      start-time-sorted order).  Blank for the last event; negative
+      (red) when the events overlap.  Re-rendered on every state push,
+      so it needs no timer of its own. */
+  function makeGapCell(ev, next) {
+    const td = document.createElement("td");
+    td.className = "gap";
+    if (next !== null) {
+      const gap = next.start_time - (ev.start_time + ev.duration);
+      td.textContent = ST.fmtDuration(gap);
+      if (gap < 0) td.classList.add("negative");
+    }
+    return td;
+  }
+
   function makeRemainingCell() {
     const td = document.createElement("td");
     td.className = "remaining";
@@ -345,6 +363,49 @@
   // (same WebSocket push, same display.js render loop), including the
   // font size a display browser last chose.
   document.getElementById("preview-frame").src = displayUrl() + "?embed=1";
+
+  // ------------------------------------ room dimming (synced displays)
+
+  // Same session-synced mechanism the display page uses, but the admin
+  // page itself stays full-brightness: the admin is operating it, and
+  // the preview strip mirrors the dimmed result.
+  const DIM_STEPS = [0, 0.3, 0.5, 0.7, 0.8, 0.9];
+  const dimDarkerBtn = document.getElementById("dim-darker");
+  const dimLighterBtn = document.getElementById("dim-lighter");
+
+  function nearestDimIndex() {
+    const level = typeof state.dim_level === "number" ? state.dim_level : 0;
+    let best = 0;
+    for (let i = 1; i < DIM_STEPS.length; i++) {
+      if (Math.abs(DIM_STEPS[i] - level) < Math.abs(DIM_STEPS[best] - level)) {
+        best = i;
+      }
+    }
+    return best;
+  }
+
+  function updateDimButtons() {
+    const idx = nearestDimIndex();
+    dimDarkerBtn.disabled = idx >= DIM_STEPS.length - 1;
+    dimLighterBtn.disabled = idx <= 0;
+  }
+
+  function changeDim(delta) {
+    const idx = Math.min(
+      DIM_STEPS.length - 1,
+      Math.max(0, nearestDimIndex() + delta)
+    );
+    // Fire-and-forget: the WS broadcast updates state.dim_level and
+    // re-enables/disables the buttons when the change is confirmed.
+    fetch("/api/" + encodeURIComponent(name) + "/dim", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ level: DIM_STEPS[idx] }),
+    }).catch(() => {});
+  }
+
+  dimDarkerBtn.addEventListener("click", () => changeDim(1));
+  dimLighterBtn.addEventListener("click", () => changeDim(-1));
 
   const qrModal = document.getElementById("qr-modal");
   const qrCodeEl = document.getElementById("qr-code");

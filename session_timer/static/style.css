@@ -151,6 +151,20 @@ body.display {
   display: none;
 }
 
+/* Room-dimming overlay on the display page (level synced via the
+   session; see display.js).  Sits above the countdown and bars but
+   below the control buttons (z-index 10), so a human standing at a
+   dimmed display can always reach "lighter". */
+#dim-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  background: #000;
+  opacity: 0; /* set inline from the synced level */
+  pointer-events: none;
+  transition: opacity 0.3s linear;
+}
+
 /* 0.5 Hz flash after expiry (DESIGN.md): on/off every 1 s */
 @keyframes blink {
   50% { opacity: 0; }
@@ -239,6 +253,11 @@ td.remaining.past {
   font-weight: bold;
 }
 
+/* Negative gap = the events overlap (the row is also overlap-marked) */
+td.gap.negative {
+  color: var(--red);
+}
+
 .step-buttons button {
   min-width: 2rem;
 }
@@ -250,11 +269,12 @@ td.remaining.past {
    projector shows (color state, idle/expired, next-speaker bar, and
    the font scale a display browser last chose). */
 #preview-frame {
-  width: 9rem;
-  height: 1.75rem;
+  width: 4rem;
+  height: 3rem;
   border: 1px solid #767676;
   border-radius: 4px;
   background: #000;
+  margin: -1em 0em -1em 0em;
 }
 
 /* Toolbar buttons and the display-page link share the same look and

@@ -6,6 +6,9 @@
   const nextWrap = document.getElementById("next-wrap");
   const nextBar = document.getElementById("next-bar");
   const nextText = document.getElementById("next-text");
+  const dimOverlay = document.getElementById("dim-overlay");
+  const dimDarkerBtn = document.getElementById("dim-darker");
+  const dimLighterBtn = document.getElementById("dim-lighter");
   const fullscreenBtn = document.getElementById("fullscreen");
   const fontSmallerBtn = document.getElementById("font-smaller");
   const fontBiggerBtn = document.getElementById("font-bigger");
@@ -40,11 +43,59 @@
   // (see applyFontSize), so the preview shows the chosen relative size.
   let serverFontScale = null;
 
+  // Room-dimming overlay: a session-synced black fade for dark rooms.
+  // All panels (standalone displays and embedded previews) share one
+  // level; the display's ☾/☀ buttons and the admin page's Darker/
+  // Lighter buttons both sync through the server (PUT /dim —
+  // presentation-only, no generation change).  The overlay sits below
+  // the control buttons so a human standing at a dimmed display can
+  // always reach "lighter".
+  const DIM_STEPS = [0, 0.3, 0.5, 0.7, 0.8, 0.9];
+  let dimLevel = 0;
+
+  function nearestDimIndex() {
+    let best = 0;
+    for (let i = 1; i < DIM_STEPS.length; i++) {
+      if (Math.abs(DIM_STEPS[i] - dimLevel) < Math.abs(DIM_STEPS[best] - dimLevel)) {
+        best = i;
+      }
+    }
+    return best;
+  }
+
+  function applyDim() {
+    dimOverlay.style.opacity = String(dimLevel);
+    dimDarkerBtn.disabled = nearestDimIndex() >= DIM_STEPS.length - 1;
+    dimLighterBtn.disabled = nearestDimIndex() <= 0;
+  }
+
+  function changeDim(delta) {
+    const idx = Math.min(
+      DIM_STEPS.length - 1,
+      Math.max(0, nearestDimIndex() + delta)
+    );
+    dimLevel = DIM_STEPS[idx];
+    applyDim();
+    // Fire-and-forget; the state broadcast confirms it everywhere.
+    fetch(ST.apiUrl(name, "/dim"), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ level: dimLevel }),
+    }).catch(() => {});
+  }
+
+  dimDarkerBtn.addEventListener("click", () => changeDim(1));
+  dimLighterBtn.addEventListener("click", () => changeDim(-1));
+
   ST.connect(name, (data) => {
     // Raw events hold service-day seconds; convert to absolute unixtime
     // once here so all countdown/current-event logic is unchanged.
     events = ST.absoluteEvents(data.events, data.anchor);
     if (embed) serverFontScale = data.font_scale;
+    if (typeof data.dim_level === "number") {
+      dimLevel = data.dim_level;
+      applyDim();
+    }
   });
 
   /** Per DESIGN.md (via ST.currentEvent): the event with the greatest

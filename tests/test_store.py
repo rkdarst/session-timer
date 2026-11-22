@@ -356,6 +356,7 @@ def test_snapshot_roundtrip_preserves_everything(tmp_path):
     session.add_event("second", 200, 30)
     session.shift(e1.id, "duration", 10)
     session.set_font_scale(1.73)
+    session.set_dim_level(0.5)
     original = session.to_dict()
 
     path = tmp_path / "sessions.json"

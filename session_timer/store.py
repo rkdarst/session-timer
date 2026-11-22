@@ -145,6 +145,11 @@ class Session:
     # admin page's embedded preview can mirror it; presentation-only
     # state (never bumps the generation).
     display_font_scale: float = 1.0
+    # Room-dimming overlay level (0 = off, 0.9 = 90% black), chosen via
+    # the darker/lighter buttons on any panel.  Synced so an admin can
+    # dim displays they cannot physically reach; presentation-only
+    # state (never bumps the generation).
+    dim_level: float = 0.0
 
     # ------------------------------------------------- bookkeeping
 
@@ -157,6 +162,7 @@ class Session:
             "generation": self.generation,
             "anchor": self.anchor,
             "font_scale": self.display_font_scale,
+            "dim_level": self.dim_level,
             "events": [event.to_dict() for event in self.events],
         }
 
@@ -174,6 +180,21 @@ class Session:
         if not 0 < scale <= 16:
             raise ValueError("scale must be between 0 and 16")
         self.display_font_scale = scale
+        self.touch()
+
+    def set_dim_level(self, level: object) -> None:
+        """Set the room-dimming overlay level (0 = off, 0.9 = 90% black).
+
+        Presentation-only state like ``display_font_scale``: no
+        generation bump, broadcast in the state payload, persisted via
+        snapshots.  Capped at 0.9 so the screen never goes fully black.
+        """
+        if isinstance(level, bool) or not isinstance(level, (int, float)):
+            raise ValueError("level must be a number")
+        level = float(level)
+        if not 0 <= level <= 0.9:
+            raise ValueError("level must be between 0 and 0.9")
+        self.dim_level = level
         self.touch()
 
     def set_anchor(self, anchor: object) -> bool:
@@ -470,7 +491,7 @@ class SessionStore:
         one interval late is harmless.)
         """
         return frozenset(
-            (name, session.generation, session.display_font_scale)
+            (name, session.generation, session.display_font_scale, session.dim_level)
             for name, session in self.sessions.items()
         )
 
@@ -506,6 +527,7 @@ class SessionStore:
                     "anchor": session.anchor,
                     "last_used": session.last_used,
                     "font_scale": session.display_font_scale,
+                    "dim_level": session.dim_level,
                     "events": [
                         {
                             "id": event.id,
@@ -575,6 +597,8 @@ class SessionStore:
                 last_used=float(sd["last_used"]),
                 # snapshots predating font-scale sync lack the key
                 display_font_scale=float(sd.get("font_scale", 1.0)),
+                # ... and those predating room-dimming lack this one
+                dim_level=float(sd.get("dim_level", 0.0)),
             )
             for ed in sd["events"]:
                 session.events.append(

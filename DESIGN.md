@@ -37,7 +37,16 @@ Allows one to view the events in the session and modify them.  There are control
   (same current-event rule as the display page: greatest start_time <=
   now, overlaps to the most recently started) and highlight that row in
   the table, so the current event is identifiable at a glance.
+* Show the gap between each event and the next one (as found by start
+  time) in a column: blank for the last event, negative (and red) when
+  events overlap.
 * Quick "event now" setup.
+* Room dimming: "darker"/"lighter" buttons that fade the display
+  screens toward black (steps up to 90% black), synced to every panel
+  via the session — so an admin can dim displays that are not
+  physically reachable (e.g. when the room lights go down).  The admin
+  page itself stays full-brightness; its preview strip shows the
+  dimmed result.
 * Download events as csv (`start_time,duration_sec,name`, with
   start_time as `H:MM:SS` service time)
 * Upload events as csv (replacing all current)
@@ -57,7 +66,7 @@ Allows one to view the events in the session and modify them.  There are control
 
 Read-only.  Show a countdown timer until end time and progress bar along the bottom.  If there is no current countdown — before the first event starts, or 5 minutes after the last event ended — the display shows a greyed-out 00:00 with no progress bar (so the countdown text size can be judged and adjusted in advance) rather than a fully blank screen.  If there are overlapping events, it shows the one that started most recently.
 
-The countdown progress bar takes the bottom 20% of the screen and slowly moves from left to right until it covers the whole duration.  It starts green, then turns yellow at 25% left, then red at 15% left.  The size of the main countdown text can be adjusted with +/- buttons in the upper-right corner (next to the fullscreen toggle; each click changes it by about 20%) and the choice is remembered per browser and synced to the session (via `PUT /api/{SESSION_NAME}/font-scale`, without changing the schedule's generation counter, so displays — which don't track generations — can send it) so the admin page's embedded preview mirrors it.  The text size is capped so it never exceeds the screen.  After expiry, the counter continues to count up negative numbers while flashing (0.5Hz), the progress bar flashes (0.5Hz); 5 minutes after the event ended the countdown area reverts to the greyed-out 00:00 idle state.  While nothing is running and a future event exists (start_time after now) — including before the first event of the day — a white bar in the next-lowest 10% of the screen (20-30% from the bottom) fills until the next event starts, with a countdown of the time remaining until then — so the current speaker can see how much time is left until the next speaker should get started.  If the gap is longer than 10 minutes (no event starts within 10 minutes of the current event's end, or nothing is running at all), the white bar stays hidden until 10 minutes before the next event and fills across that window; shorter gaps fill from the moment the current event ends.
+The countdown progress bar takes the bottom 20% of the screen and slowly moves from left to right until it covers the whole duration.  It starts green, then turns yellow at 25% left, then red at 15% left.  The size of the main countdown text can be adjusted with +/- buttons in the upper-right corner (next to the fullscreen toggle; each click changes it by about 20%) and the choice is remembered per browser and synced to the session (via `PUT /api/{SESSION_NAME}/font-scale`, without changing the schedule's generation counter, so displays — which don't track generations — can send it) so the admin page's embedded preview mirrors it.  The screen can also be dimmed for dark rooms with darker/lighter buttons (same corner): a black overlay fades in steps up to 90% black, and the level is session state synced to every panel via `PUT /api/{SESSION_NAME}/dim` (again without affecting the generation), so an admin can dim displays remotely; the overlay sits beneath the control buttons so a human at a dimmed display can still brighten it.  The text size is capped so it never exceeds the screen.  After expiry, the counter continues to count up negative numbers while flashing (0.5Hz), the progress bar flashes (0.5Hz); 5 minutes after the event ended the countdown area reverts to the greyed-out 00:00 idle state.  While nothing is running and a future event exists (start_time after now) — including before the first event of the day — a white bar in the next-lowest 10% of the screen (20-30% from the bottom) fills until the next event starts, with a countdown of the time remaining until then — so the current speaker can see how much time is left until the next speaker should get started.  If the gap is longer than 10 minutes (no event starts within 10 minutes of the current event's end, or nothing is running at all), the white bar stays hidden until 10 minutes before the next event and fills across that window; shorter gaps fill from the moment the current event ends.
 
 
 ## Tools
