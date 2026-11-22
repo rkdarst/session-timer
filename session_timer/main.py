@@ -105,6 +105,31 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.middleware("http")
+async def request_body_cap(request: Request, call_next):
+    """Reject oversized request bodies with 413 before they are parsed.
+
+    Bounded for the same reason as the CSV upload cap (config
+    MAX_CSV_UPLOAD_BYTES, the same 1 MB): real payloads are tiny (an
+    events table is 128 events x 128 chars), so anything larger is
+    either a mistake or a memory-exhaustion attempt.  Starlette reads
+    the whole body into memory before pydantic validates it, so route
+    validation alone bounds nothing.
+    """
+    if request.url.path.startswith("/api/"):
+        declared = request.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > config.MAX_CSV_UPLOAD_BYTES:
+            # Note: return the response rather than raising — a raise
+            # in user middleware sits outside the ExceptionMiddleware
+            # layer and would surface as a 500.
+            return PlainTextResponse(
+                f"request body too large (limit "
+                f"{config.MAX_CSV_UPLOAD_BYTES} bytes)",
+                status_code=413,
+            )
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def security_headers(request: Request, call_next):
     """Basic hardening headers on every HTTP response.
 
@@ -428,6 +453,12 @@ async def websocket_endpoint(websocket: WebSocket, name: str):
                         client_text = task.result()
                 except WebSocketDisconnect:
                     disconnect = True
+                except Exception:
+                    # Malformed frame (e.g. binary => KeyError inside
+                    # receive_text()): this client is speaking a protocol
+                    # we do not understand.  Tear the connection down
+                    # cleanly instead of crashing the endpoint.
+                    disconnect = True
             try:
                 if pushed is not None:
                     await websocket.send_json(pushed)
@@ -437,6 +468,15 @@ async def websocket_endpoint(websocket: WebSocket, name: str):
                 # Client went away mid-send.
                 break
             if disconnect:
+                # Explicit close: returning without one would leave a
+                # still-connected client waiting for a message that
+                # never comes (that is exactly what a malformed frame
+                # triggers).  A real disconnect simply fails the close
+                # attempt, which is caught below.
+                try:
+                    await websocket.close(code=1008)
+                except (WebSocketDisconnect, RuntimeError):
+                    pass  # client already gone
                 break
     except WebSocketDisconnect:
         pass

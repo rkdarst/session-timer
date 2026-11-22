@@ -42,11 +42,20 @@ Phases 1–4 are implemented and verified:
   are capped at 24 h (config.MAX_DURATION_SECONDS, checked in
   add/update/shift/replace); duration shifts validate before mutating
   (true all-or-nothing cascades); Hub push queues are capped (16) and a
-  slow consumer keeps only the newest snapshot; every response carries
+  stalled client keeps only the newest snapshot; every response carries
   X-Content-Type-Options: nosniff + Referrer-Policy: no-referrer, with
   framing deliberately unrestricted (display page is embeddable); the
   compose template documents Docker log rotation so a request flood
   cannot fill the host disk.  Tests: 96 passing.
+- Audit fixes round 2 (probe-found): the WebSocket loop catches any
+  exception from a receive task (a binary frame used to raise an
+  uncaught KeyError in `receive_text()` and crash the endpoint) and
+  then always sends an explicit close, so a malformed-frame client gets
+  a clean teardown instead of hanging; all `/api/*` JSON request bodies
+  are capped at 1 MB by the `request_body_cap` middleware (413, same
+  limit as CSV uploads — the response is returned directly, not raised,
+  because user middleware sits outside the ExceptionMiddleware layer).
+  Tests: 107 passing.
 - Times are **wall-clock times of day** in the session timezone
   (seconds of day in `[0, 86400)`; sessions are reusable daily
   templates that reset at the zone's midnight): admin start column

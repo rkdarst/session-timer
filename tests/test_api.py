@@ -584,3 +584,128 @@ def test_hub_broadcast_keeps_only_newest_for_slow_consumer():
     items = [q.get_nowait() for _ in range(q.qsize())]
     assert items[-1] == {"i": 49}
     hub.unsubscribe("hubtest", q)
+
+
+# --------------------------------------------- problem-hunt regressions
+
+
+def test_ws_binary_frame_does_not_crash_endpoint(client):
+    """A binary frame has no text key, which used to raise an uncaught
+    KeyError in receive_text() and kill the endpoint with a traceback.
+    The client must now get a clean teardown and the server must stay
+    healthy."""
+    add_event(client, 0, "e", 0, 60)
+    with client.websocket_connect(f"/api/{NAME}/ws") as ws:
+        ws.receive_json()  # initial state
+        (ws.send_bytes if hasattr(ws, "send_bytes") else ws.send)(b"\x01\x02")
+        # Server must tear the connection down with an explicit close
+        # (older starlette raises on receive; newer returns the close
+        # message as a plain dict).  The failure mode being guarded
+        # against is an endpoint exception leaking out and the client
+        # never seeing a close at all.
+        closed = False
+        for _ in range(10):
+            try:
+                msg = ws.receive()
+            except Exception:
+                closed = True
+                break
+            if isinstance(msg, dict) and msg.get("type") == "websocket.close":
+                closed = True
+                break
+        assert closed, "server never closed the connection after a binary frame"
+    r = client.get(f"/api/{NAME}/state")
+    assert r.status_code == 200
+
+
+def test_oversized_json_body_rejected_413(client):
+    """JSON bodies are bounded like CSV uploads: a 2 MB body must get
+    413 before pydantic parses it, not a parse-then-reject 400."""
+    r = client.post(
+        f"/api/{NAME}/events",
+        json={"name": "x" * 2_000_000, "start_time": 0, "duration": 60},
+        headers=gen(0),
+    )
+    assert r.status_code == 413
+
+
+def test_missing_generation_header_is_422(client):
+    r = client.post(
+        f"/api/{NAME}/events",
+        json={"name": "x", "start_time": 0, "duration": 60},
+    )
+    assert r.status_code == 422  # a validation error, not a 500
+
+
+def test_patch_end_time_before_start_rejected(client):
+    add_event(client, 0, "e", 100, 60)
+    eid = client.get(f"/api/{NAME}/state").json()["events"][0]["id"]
+    r = client.patch(
+        f"/api/{NAME}/events/{eid}", json={"end_time": 50}, headers=gen(1)
+    )
+    assert r.status_code == 400
+    r = client.patch(
+        f"/api/{NAME}/events/{eid}", json={"end_time": 100}, headers=gen(1)
+    )
+    assert r.status_code == 400  # end == start => zero duration
+
+
+def test_font_scale_and_dim_bounds_rejected(client):
+    client.post(f"/api/{NAME}/timezone", json={"timezone": "UTC"})
+    for bad in (100, -1):
+        r = client.put(f"/api/{NAME}/font-scale", json={"scale": bad})
+        assert r.status_code == 400
+    for bad in (0.95, -0.1):
+        r = client.put(f"/api/{NAME}/dim", json={"level": bad})
+        assert r.status_code == 400
+    # boundaries themselves are valid
+    r = client.put(f"/api/{NAME}/dim", json={"level": 0.9})
+    assert r.status_code == 200
+
+
+def test_unresolvable_timezone_fails_open(client):
+    """A charset-valid but unresolvable zone is stored (fail-open):
+    utc_offset is null and server-side now-of-day features explain
+    how to fix it."""
+    r = client.post(f"/api/{NAME}/timezone", json={"timezone": "Mars/Olympus"})
+    assert r.status_code == 200
+    assert r.json()["utc_offset"] is None
+    r = client.post(
+        f"/api/{NAME}/events/now", json={"duration": 60}, headers=gen(1)
+    )
+    assert r.status_code == 400
+    assert "timezone" in r.json()["detail"]
+
+
+def test_timezone_bumps_generation_only_on_change(client):
+    r = client.post(f"/api/{NAME}/timezone", json={"timezone": "UTC"})
+    assert r.json()["generation"] == 1
+    r = client.post(f"/api/{NAME}/timezone", json={"timezone": "UTC"})
+    assert r.json()["generation"] == 1  # same value: no bump
+
+
+def test_hub_unsubscribes_after_websocket_disconnect(client):
+    from session_timer.main import hub
+
+    with client.websocket_connect(f"/api/{NAME}/ws") as ws:
+        ws.receive_json()
+    deadline = time.time() + 2
+    while time.time() < deadline and hub._queues.get(NAME):
+        time.sleep(0.05)
+    assert NAME not in hub._queues
+
+
+def test_lax_type_coercion_documented(client):
+    """pydantic lax mode: numeric strings coerce, real floats fail."""
+    r = client.post(
+        f"/api/{NAME}/events",
+        json={"name": "x", "start_time": "100", "duration": 60},
+        headers=gen(0),
+    )
+    assert r.status_code == 200
+    r = client.post(
+        f"/api/{NAME}/events",
+        json={"name": "x", "start_time": 100.5, "duration": 60},
+        headers=gen(1),
+    )
+    assert r.status_code == 422

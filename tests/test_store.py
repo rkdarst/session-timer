@@ -633,3 +633,27 @@ def test_shift_duration_is_all_or_nothing():
     assert a.duration == 60
     assert b.start_time == 86390
     assert session.generation == 2  # rejected shift did not bump
+
+
+def test_csv_roundtrip_preserves_special_names():
+    session = Session(name="t")
+    names = [
+        "comma, name",
+        chr(34) + "quoted" + chr(34) + " name",
+        "line\nbreak".replace(chr(92) + "n", chr(10)),
+        "unicode éü中",
+        "",
+    ]
+    for i, name in enumerate(names):
+        session.add_event(name, i * 60, 60)
+    text = session.to_csv()
+    fresh = Session(name="t2")
+    fresh.replace_from_csv(text)
+    assert [e.name for e in fresh.events] == names
+
+
+def test_csv_parses_crlf_line_endings():
+    session = Session(name="t")
+    n = session.replace_from_csv("0:00,60,a\r\n0:01,60,b\r\n")
+    assert n == 2
+    assert [e.start_time for e in session.events] == [0, 60]

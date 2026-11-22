@@ -122,7 +122,9 @@ spreadsheets do not treat them as formulas (re-uploading an export
 keeps the quote).  Mutations validate the session name, so junk names
 cannot occupy the session cap; WebSocket push queues are capped -- a
 stalled client is fed only the newest state (each payload is a full
-snapshot).
+snapshot); the WebSocket loop survives malformed frames (e.g. binary)
+with a clean explicit close, and all `/api/*` JSON request bodies are
+capped at 1 MB like CSV uploads (rejected with 413 before parsing).
 
 
 Design with simplicity and security in mind.
