@@ -1,9 +1,18 @@
-# Build the session-timer image and publish it to ghcr.io.
+# Build the session-timer image and publish it to ghcr.io as a
+# multi-arch image: linux/amd64 plus linux/arm64 (e.g. Raspberry Pi 5
+# on 64-bit Raspberry Pi OS).
 #
-# On pushes, the image is tagged `session-timer:latest` in the runner,
-# smoke-tested, and pushed to `ghcr.io/rkdarst/session-timer:latest`
-# using the workflow's own GITHUB_TOKEN (packages: write — no registry
-# credentials or secrets configured anywhere).
+# Job `test` runs pytest (same uv.lock as the image), builds the amd64
+# image locally and smoke-tests the container — on every push / PR /
+# manual dispatch.  Job `publish` (pushes only, after `test`) cross-
+# builds amd64 + arm64 under QEMU and pushes the multi-arch manifest to
+# `ghcr.io/rkdarst/session-timer:latest` with the workflow's own
+# GITHUB_TOKEN (packages: write — no registry credentials or secrets
+# configured anywhere).  Layers are cached in the GHA cache: the amd64
+# half of the publish build is usually a cache hit, only arm64 is
+# built, and it rebuilds fully only when pyproject.toml/uv.lock change
+# (all Python deps have aarch64 wheels, so nothing compiles under
+# emulation).
 #
 # Pull-request runs build and smoke-test but never push.
 #
@@ -33,7 +42,7 @@ permissions:
   packages: write
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -52,7 +61,7 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
-      - name: Build image (session-timer:latest)
+      - name: Build image (session-timer:latest, amd64)
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -78,21 +87,35 @@ jobs:
           docker logs smoke >&2 || true
           exit 1
 
-      # Publish to ghcr.io, only on push events (PR runs stay local).
-      # The built-in GITHUB_TOKEN may push to this repository's own
-      # package namespace; the first push creates the package (private
-      # by default — flip it to public in the package settings if it
-      # should be pullable anonymously).
-      - name: Log in to ghcr.io
-        if: github.event_name == 'push'
-        uses: docker/login-action@v4
+  publish:
+    if: github.event_name == 'push'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # QEMU + binfmt lets the amd64 runner build the arm64 half of the
+      # image (Pi 5 / 64-bit Raspberry Pi OS).  The first push creates
+      # the package (private by default — flip it to public in the
+      # package settings if it should be pullable anonymously).
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push to ghcr.io (ghcr.io/rkdarst/session-timer:latest)
-        if: github.event_name == 'push'
-        run: |
-          docker tag session-timer:latest ghcr.io/rkdarst/session-timer:latest
-          docker push ghcr.io/rkdarst/session-timer:latest
+      # One manifest, two architectures: docker pulls pick the right
+      # one automatically (e.g. on a Pi 5 or an x86 server).
+      - name: Build and push (ghcr.io/rkdarst/session-timer:latest, amd64+arm64)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/rkdarst/session-timer:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

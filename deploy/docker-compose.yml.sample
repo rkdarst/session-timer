@@ -22,6 +22,11 @@
 #
 #   build: /srv/session-timer
 #
+# The published image is multi-arch (linux/amd64 and linux/arm64), so
+# the same pull works on x86 servers and on Raspberry Pis running
+# 64-bit Raspberry Pi OS (e.g. Pi 5); docker picks the right one
+# automatically.  (32-bit Raspberry Pi OS is NOT covered — use the
+# 64-bit image/OS.)
 # Deployment notes (all by design, see DESIGN.md):
 # - State is memory-only by default: no volumes, no database.
 #   Restarting the container loses every session; that is by design.
