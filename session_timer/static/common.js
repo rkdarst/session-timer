@@ -3,7 +3,9 @@
 "use strict";
 
 const ST = (() => {
-  const NAME_RE = /^[A-Za-z0-9_-]{1,128}$/;
+  // Mirrors NAME_RE in session_timer/config.py; the length limit comes
+  // from config.js so client and server stay in sync.
+  const NAME_RE = new RegExp("^[A-Za-z0-9_-]{1," + CONFIG.nameMaxLength + "}$");
 
   /** Session name from the URL path: "/NAME/" or "/NAME/display". */
   function sessionName() {

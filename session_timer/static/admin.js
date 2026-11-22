@@ -369,7 +369,7 @@
   // Same session-synced mechanism the display page uses, but the admin
   // page itself stays full-brightness: the admin is operating it, and
   // the preview strip mirrors the dimmed result.
-  const DIM_STEPS = [0, 0.3, 0.5, 0.7, 0.8, 0.9];
+  const DIM_STEPS = CONFIG.dimSteps;
   const dimDarkerBtn = document.getElementById("dim-darker");
   const dimLighterBtn = document.getElementById("dim-lighter");
 
@@ -436,6 +436,80 @@
     } catch (err) {
       /* non-fatal: the choice just won't persist */
     }
+    syncThemeLabel();
+  });
+
+  // Keep the menu item's label in sync with the actual state.
+  function syncThemeLabel() {
+    themeBtn.textContent =
+      "Dark mode: " + (document.body.classList.contains("dark") ? "on" : "off");
+  }
+  syncThemeLabel();
+
+  // ------------------------------------------------ hamburger menu
+
+  // Overflow actions (display page, QR, CSV, dark mode).  Auto-closes
+  // after any action, on Escape, or on a click anywhere outside it.
+  const menuBtn = document.getElementById("menu-btn");
+  const menu = document.getElementById("menu");
+  const dropdown = menuBtn.parentElement;
+
+  menuBtn.addEventListener("click", () => {
+    menu.hidden = !menu.hidden;
+  });
+  // Any click on a menu item runs that item's own handler and closes.
+  menu.addEventListener("click", (event) => {
+    if (event.target.closest("button, a")) menu.hidden = true;
+  });
+  document.addEventListener("click", (event) => {
+    if (!menu.hidden && !dropdown.contains(event.target)) menu.hidden = true;
+  });
+
+  // ------------------------------------ timezone reset (re-anchor)
+
+  // Deliberate escape hatch for the first-anchor-wins rule: keep every
+  // event's service-day seconds (the HH:MM column is unchanged) but
+  // re-base the day on this browser's timezone.  Absolute times —
+  // including any running event — shift by the timezone difference.
+  document.getElementById("reset-anchor").addEventListener("click", () => {
+    if (state.anchor == null) {
+      error("Session is not initialized yet — try again in a moment");
+      return;
+    }
+    if (
+      !window.confirm(
+        "Re-anchor this session to this browser's timezone?\n\n" +
+          "The schedule's HH:MM times stay the same, but they will now " +
+          "mean this browser's local time; running and upcoming events " +
+          "shift by the timezone difference."
+      )
+    ) {
+      return;
+    }
+    guard(async () => {
+      await mutate("/anchor", "POST", {
+        anchor: serviceAnchorForToday(),
+        force: true,
+      });
+    });
+  });
+
+  // ------------------------------------------------- show raw state
+
+  // The JSON exactly as this client last received it (WebSocket push or
+  // mutation response); re-rendered on every open.
+  const stateModal = document.getElementById("state-modal");
+  const stateJson = document.getElementById("state-json");
+  document.getElementById("show-state").addEventListener("click", () => {
+    stateJson.textContent = JSON.stringify(state, null, 2);
+    stateModal.hidden = false;
+  });
+  document.getElementById("state-close").addEventListener("click", () => {
+    stateModal.hidden = true;
+  });
+  // Click on the dark backdrop (not the box) also closes.
+  stateModal.addEventListener("click", (event) => {
+    if (event.target === stateModal) stateModal.hidden = true;
   });
 
   const qrModal = document.getElementById("qr-modal");
@@ -469,8 +543,45 @@
   qrModal.addEventListener("click", (event) => {
     if (event.target === qrModal) qrModal.hidden = true;
   });
+
+  // ---------------------------------------------- data-loss warning
+
+  // The "Events are NOT saved long term" banner only applies when the
+  // operator has not enabled snapshot persistence (SESSION_TIMER_DATA_DIR);
+  // hide it when they did.  Shown by default, so a failed check fails
+  // toward the safe (visible warning) side.
+  fetch("/api/persistence")
+    .then((r) => r.json())
+    .then((cfg) => {
+      if (cfg && cfg.persisted) {
+        document.getElementById("warn-banner").hidden = true;
+      }
+    })
+    .catch(() => {
+      /* keep the warning visible */
+    });
+
+  // ------------------------------------------------- help popup
+
+  const helpModal = document.getElementById("help-modal");
+  document.getElementById("show-help").addEventListener("click", () => {
+    helpModal.hidden = false;
+  });
+  document.getElementById("help-close").addEventListener("click", () => {
+    helpModal.hidden = true;
+  });
+  // Click on the dark backdrop (not the box) also closes.
+  helpModal.addEventListener("click", (event) => {
+    if (event.target === helpModal) helpModal.hidden = true;
+  });
   window.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") qrModal.hidden = true;
+    if (event.key === "Escape") {
+      qrModal.hidden = true;
+      helpModal.hidden = true;
+      stateModal.hidden = true;
+      const menu = document.getElementById("menu");
+      if (menu) menu.hidden = true;
+    }
   });
 
   // ------------------------------------------------------- toolbar
@@ -484,11 +595,11 @@
       // Default: chained after the final event (same duration), so a
       // run of events just extends the schedule.  With no events yet,
       // start at the current time (rounded down to the minute) for
-      // 10 minutes.  Times are service-day seconds.
+      // CONFIG.newEventDefaultDuration.  Times are service-day seconds.
       const events = sortedEvents();
       const last = events.length > 0 ? events[events.length - 1] : null;
       const start = last ? last.start_time + last.duration : Math.floor(nowDaySeconds() / 60) * 60;
-      const duration = last ? last.duration : 600;
+      const duration = last ? last.duration : CONFIG.newEventDefaultDuration;
       await mutate("/events", "POST", { name: "", start_time: start, duration: duration });
     });
   });

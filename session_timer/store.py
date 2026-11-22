@@ -197,16 +197,21 @@ class Session:
         self.dim_level = level
         self.touch()
 
-    def set_anchor(self, anchor: object) -> bool:
+    def set_anchor(self, anchor: object, *, force: bool = False) -> bool:
         """Set the service-day anchor; returns True when it changed.
 
         Only the first value wins: later calls are no-ops so a second
         admin cannot move the day out from under a running session.
+        With ``force`` (the admin menu's explicit "reset timezone"
+        action) the anchor is replaced: event day-seconds are kept, so
+        the schedule's HH:MM numbers stay the same but now mean the
+        re-anchored timezone's wall clock (and absolute times shift by
+        the timezone difference).
         """
         anchor = _as_int(anchor, "anchor")
         if anchor <= 0:
             raise ValueError("anchor must be a positive unixtime")
-        if self.anchor is not None:
+        if self.anchor is not None and (not force or self.anchor == anchor):
             return False
         self.anchor = anchor
         self._bump()

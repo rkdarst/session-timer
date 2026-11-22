@@ -228,6 +228,7 @@ class EventNowIn(BaseModel):
 
 class AnchorIn(BaseModel):
     anchor: int
+    force: bool = False  # admin menu "reset timezone": replace the anchor
 
 
 class FontScaleIn(BaseModel):
@@ -239,6 +240,12 @@ class DimIn(BaseModel):
 
 
 # --------------------------------------------------------------- pages
+
+
+@app.get("/api/persistence")
+async def persistence_info():
+    """Whether snapshot persistence is enabled (drives the admin warning)."""
+    return {"persisted": bool(config.DATA_DIR)}
 
 
 @app.get("/{name}/", include_in_schema=False)
@@ -263,7 +270,10 @@ async def set_anchor(name: str, body: AnchorIn):
     Only the admin browser knows the intended local day (the server is
     timezone-agnostic), so it computes "local noon minus 12h" and posts
     it here.  The first anchor wins; later calls are no-ops, but the
-    response always carries the canonical state.
+    response always carries the canonical state.  With ``force`` (the
+    admin menu's "Reset timezone" action) the anchor is replaced while
+    keeping every event's day-seconds, so the HH:MM schedule is
+    unchanged but now means the re-anchored timezone's wall clock.
     """
     check_name(name)
     if body.anchor <= 0:
@@ -271,7 +281,7 @@ async def set_anchor(name: str, body: AnchorIn):
     session = store.get(name)
     if session is None:
         session = store.get_or_create(name)
-    if session.set_anchor(body.anchor):
+    if session.set_anchor(body.anchor, force=body.force):
         await broadcast_state(name, session)
     return session.to_dict()
 

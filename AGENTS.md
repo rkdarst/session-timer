@@ -25,7 +25,12 @@ Phases 1–4 are implemented and verified:
   generation bump; included in state payloads and snapshots); the same
   pattern carries the room-dim level (`PUT /api/{name}/dim`, steps up
   to 90% black) with darker/lighter buttons on both pages
-- `tests/test_store.py`, `tests/test_api.py` — 49 tests, all passing
+- `tests/test_store.py`, `tests/test_api.py` — all tests passing
+- Admin toolbar: add/event-now/cascade/preview/dim buttons stay
+  visible; overflow actions (display link, QR, CSV download/upload,
+  dark-mode toggle) live behind a ☰ hamburger menu that auto-closes;
+  a permanent "Events are NOT saved long term" banner sits at the top
+  and a Help button opens a concise popup
 - Verified live with uvicorn: pages 200, 409 on stale generation, CSV
   round-trip, WebSocket initial state + push + ping/pong
 - Times are GTFS-style **service times** (seconds since the session's
@@ -57,6 +62,7 @@ speaker-timer/               # (repo folder name; package is session_timer)
 │   └── static/
 │       ├── admin.html + admin.js     # admin UI (static, no templating)
 │       ├── display.html + display.js # display UI (static, no templating)
+│       ├── config.js                 # client-side tunables (global CONFIG, frozen)
 │       ├── common.js                 # shared websocket + render helpers
 │       ├── qrcode.js                 # vendored qrcode-generator 1.4.4 (MIT)
 │       └── style.css                 # shared styles

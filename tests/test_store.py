@@ -474,6 +474,26 @@ def test_set_anchor_validates():
     assert session.generation == 0  # nothing changed
 
 
+def test_set_anchor_force_rebases_day_but_keeps_events():
+    session = make_session(("a", 3600, 600), ("b", 7200, 600))
+    session.set_anchor(1000)
+    generation = session.generation
+
+    # Without force: still first-write-wins.
+    assert session.set_anchor(2000) is False
+    assert session.anchor == 1000
+    assert session.generation == generation
+
+    # Forced re-anchor: day-seconds untouched, generation bumps, and a
+    # repeat with the same value is a no-op (no spurious broadcast).
+    assert session.set_anchor(2000, force=True) is True
+    assert session.anchor == 2000
+    assert [e.start_time for e in session.events] == [3600, 7200]
+    assert session.generation == generation + 1
+    assert session.set_anchor(2000, force=True) is False
+    assert session.generation == generation + 1
+
+
 def test_to_dict_includes_anchor():
     session = Session(name="t")
     assert session.to_dict()["anchor"] is None

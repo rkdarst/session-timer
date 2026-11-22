@@ -281,11 +281,54 @@ def test_pages_served(client):
         (f"/{NAME}/", "preview-frame"),
         (f"/{NAME}/", ">Gap</th>"),
         (f"/{NAME}/", "toggle-theme"),
+        (f"/{NAME}/", "Events are NOT saved long term"),
+        (f"/{NAME}/", "show-help"),
+        (f"/{NAME}/", "menu-btn"),
+        (f"/{NAME}/", "config.js"),
         (f"/{NAME}/display", 'id="timer"'),
+        (f"/{NAME}/display", "config.js"),
     ]:
         resp = client.get(path)
         assert resp.status_code == 200
         assert marker in resp.text
+
+
+def test_anchor_reset_force(client):
+    """The admin menu's "Reset timezone": re-anchor keeping day-seconds."""
+    r = client.post(f"/api/{NAME}/anchor", json={"anchor": 1700000000})
+    assert r.status_code == 200
+    assert add_event(client, 1, "evt", 3600, 600).status_code == 200
+
+    # Plain re-post stays a no-op (first anchor wins)...
+    r = client.post(f"/api/{NAME}/anchor", json={"anchor": 1700036000})
+    assert r.json()["anchor"] == 1700000000
+
+    # ...but force re-anchors while keeping every event's day-seconds.
+    r = client.post(f"/api/{NAME}/anchor", json={"anchor": 1700036000, "force": True})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["anchor"] == 1700036000
+    assert data["events"][0]["start_time"] == 3600
+    assert data["generation"] == 3  # anchor + add_event + re-anchor
+
+    # Repeat with the same value: no generation bump (no spurious push).
+    r = client.post(f"/api/{NAME}/anchor", json={"anchor": 1700036000, "force": True})
+    assert r.json()["generation"] == 3
+
+
+def test_persistence_endpoint(client, monkeypatch):
+    from session_timer import config
+
+    r = client.get("/api/persistence")
+    assert r.status_code == 200
+    assert r.json() == {"persisted": bool(config.DATA_DIR)}
+
+    # When the operator sets SESSION_TIMER_DATA_DIR (here: patched after
+    # import, which the route reads at request time), the flag flips and
+    # admin.js hides the warning banner.
+    monkeypatch.setattr(config, "DATA_DIR", "/tmp/session-timer-data")
+    r = client.get("/api/persistence")
+    assert r.json() == {"persisted": True}
 
 
 def test_websocket_initial_state_and_push(client):

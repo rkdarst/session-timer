@@ -217,6 +217,16 @@ body.admin.dark {
   border-radius: 4px;
 }
 
+/* Permanent data-loss warning at the top of the admin page */
+#warn-banner {
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  background: var(--yellow);
+  color: #000;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
 #stale-banner {
   position: sticky;
   top: 0;
@@ -308,8 +318,7 @@ td.gap.negative {
 
 /* Toolbar buttons and the display-page link share the same look and
    size (native button fonts would otherwise be smaller than the link) */
-.toolbar button,
-#display-link {
+.toolbar button {
   font-size: 0.875rem;
   padding: 0.25rem 0.75rem;
   border: 1px solid var(--btn-border);
@@ -318,8 +327,53 @@ td.gap.negative {
   color: var(--btn-fg);
 }
 
-.toolbar button:hover,
-#display-link:hover {
+.toolbar button:hover {
+  background: var(--btn-hover);
+}
+
+/* Hamburger menu: overflow actions (display link, QR, CSV, dark mode) */
+.dropdown {
+  position: relative;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 0.5rem;
+  min-width: 10rem;
+  background: var(--page-bg);
+  border: 1px solid var(--btn-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+/* The hidden attribute must win over the flex layout above */
+.dropdown-menu[hidden] {
+  display: none;
+}
+
+.dropdown-menu button,
+.dropdown-menu a {
+  font-size: 0.875rem;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--btn-border);
+  border-radius: 4px;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dropdown-menu button:hover,
+.dropdown-menu a:hover {
   background: var(--btn-hover);
 }
 
@@ -328,8 +382,9 @@ td.gap.negative {
   text-decoration: none;
 }
 
-/* QR code popup */
-#qr-modal {
+/* QR code and help popups */
+#qr-modal,
+#help-modal {
   position: fixed;
   inset: 0;
   z-index: 100;
@@ -340,11 +395,13 @@ td.gap.negative {
 }
 
 /* The hidden attribute must win over the flex layout above */
-#qr-modal[hidden] {
+#qr-modal[hidden],
+#help-modal[hidden] {
   display: none;
 }
 
-.qr-box {
+.qr-box,
+.help-box {
   background: #fff;
   color: #000;
   padding: 1rem 1.5rem;
@@ -353,7 +410,42 @@ td.gap.negative {
   max-width: min(90vw, 30rem);
 }
 
-.qr-box h2 {
+.help-box {
+  text-align: left;
+  max-width: min(90vw, 40rem);
+  max-height: 85vh;
+  overflow: auto;
+}
+
+.help-box ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.help-box li {
+  margin: 0.45rem 0;
+}
+
+.help-foot {
+  font-size: 0.85rem;
+  color: #555;
+  margin: 0.75rem 0 0;
+}
+
+#state-json {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  max-height: 55vh;
+  overflow: auto;
+}
+
+.qr-box h2,
+.help-box h2 {
   font-size: 1.1rem;
   margin: 0 0 0.75rem;
 }

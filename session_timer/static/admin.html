@@ -8,6 +8,10 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="admin">
+<div id="warn-banner">
+  Events are NOT saved long term &mdash; they live in server memory and are
+  lost on restart. Download a CSV to keep a copy (see Help).
+</div>
 <div id="stale-banner" hidden>
   State changed by someone else &mdash; your view is outdated.
   <button onclick="location.reload()">Refresh</button>
@@ -25,12 +29,20 @@
   <button id="dim-darker" title="Dim the display screens (synced to every panel)">☾</button>
   <button id="dim-lighter" title="Brighten the display screens (synced to every panel)">☀</button>
   <span style="flex: 1"></span>
-  <a id="display-link" href="" target="_blank" rel="noopener" title="Open the read-only display page in a new tab">Display</a>
-  <button id="show-qr" title="Show a QR code linking to the display page">Display QR</button>
-  <button id="download-csv">Download CSV</button>
-  <button id="upload-csv-btn">Upload CSV</button>
-  <input type="file" id="upload-csv" accept=".csv,text/csv" hidden>
-  <button id="toggle-theme" title="Toggle dark mode (this screen only)">🌓</button>
+  <button id="show-help" title="Quick help">Help</button>
+  <div class="dropdown">
+    <button id="menu-btn" title="More actions">☰</button>
+    <div id="menu" class="dropdown-menu" hidden>
+      <a id="display-link" href="" target="_blank" rel="noopener" title="Open the read-only display page in a new tab">Display page</a>
+      <button id="show-qr" title="Show a QR code linking to the display page">Display QR</button>
+      <button id="download-csv">Download CSV</button>
+      <button id="upload-csv-btn">Upload CSV</button>
+      <input type="file" id="upload-csv" accept=".csv,text/csv" hidden>
+      <button id="reset-anchor" title="Re-anchor the session to this browser's timezone: the HH:MM schedule stays, absolute times shift">Reset timezone (this browser)</button>
+      <button id="show-state" title="Show the raw JSON state as this client sees it">Show raw state</button>
+      <button id="toggle-theme" title="Toggle dark mode (this screen only)">Dark mode: off</button>
+    </div>
+  </div>
 </div>
 
 <table id="events-table">
@@ -59,6 +71,46 @@
   </div>
 </div>
 
+<div id="help-modal" hidden>
+  <div class="help-box">
+    <h2>Quick help</h2>
+    <ul>
+      <li><b>The URL is everything.</b> Anyone with the session URL can view
+        or edit; there is no login. Share the display page via the QR code
+        and keep the admin URL to yourself.</li>
+      <li><b>Times are times of day</b> (24-hour HH:MM, your browser's
+        timezone &mdash; fixed by the first admin visit). "Add event" chains
+        onto the last one; "Event now" starts one immediately.</li>
+      <li><b>+/- nudge by a minute.</b> With "delay later events" checked,
+        they cascade to everything starting after (shown in the Gap
+        column; negative = overlap, not blocked).</li>
+      <li><b>Everything syncs live</b> across all open panels. If someone
+        else edits while you do, you'll be asked to refresh.</li>
+      <li><b>Display colors:</b> green, yellow at &le;25% left, red at
+        &le;15%; after expiry it flashes for 5 minutes, then idles at a
+        grey 00:00.</li>
+      <li><b>On the display:</b> ⛶ fullscreen; +/− text size (per display
+        browser, mirrored in the preview strip); ☾/☀ room dimming, synced
+        to <i>every</i> panel &mdash; handy from the admin screen when the
+        room lights go down.</li>
+      <li><b>Data is memory-only.</b> Lost on server restart unless the
+        operator enabled snapshots, and idle sessions expire after 31
+        days &mdash; download a CSV to be safe.</li>
+    </ul>
+    <p class="help-foot">Otherwise: poke at it &mdash; it's meant to be explored.</p>
+    <button id="help-close">Close</button>
+  </div>
+</div>
+
+<div id="state-modal" hidden>
+  <div class="help-box">
+    <h2>Raw state (as seen by this client)</h2>
+    <pre id="state-json"></pre>
+    <button id="state-close">Close</button>
+  </div>
+</div>
+
+<script src="/static/config.js"></script>
 <script src="/static/common.js"></script>
 <script src="/static/qrcode.js"></script>
 <script src="/static/admin.js"></script>

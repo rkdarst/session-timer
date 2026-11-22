@@ -13,14 +13,16 @@
   const fontSmallerBtn = document.getElementById("font-smaller");
   const fontBiggerBtn = document.getElementById("font-bigger");
   const name = ST.sessionName();
-  // Flashing after expiry is capped: 5 minutes after an event ends the
+  // Flashing after expiry is capped: FLASH_LIMIT after an event ends the
   // counter and bar stop flashing (steady red, still counting negative).
-  const FLASH_LIMIT = 5 * 60;
-  // "Next speaker" bar: if no event starts within 10 minutes of the
+  // Tunables live in config.js (shared with the admin page); bound to
+  // short local names here for readability.
+  const FLASH_LIMIT = CONFIG.flashLimitSeconds;
+  // "Next speaker" bar: if no event starts within NEXT_WINDOW of the
   // current event's end (long gap), the bar stays hidden and only
-  // fills during the final 10 minutes before the next event.  Shorter
+  // fills during the final NEXT_WINDOW before the next event.  Shorter
   // gaps fill across the whole gap, starting at expiry.
-  const NEXT_WINDOW = 10 * 60;
+  const NEXT_WINDOW = CONFIG.nextWindowSeconds;
 
   // Embedded in the admin page's live preview (iframe with ?embed=1):
   // the fullscreen and text-size controls make no sense there, and the
@@ -50,7 +52,7 @@
   // presentation-only, no generation change).  The overlay sits below
   // the control buttons so a human standing at a dimmed display can
   // always reach "lighter".
-  const DIM_STEPS = [0, 0.3, 0.5, 0.7, 0.8, 0.9];
+  const DIM_STEPS = CONFIG.dimSteps;
   let dimLevel = 0;
 
   function nearestDimIndex() {
@@ -135,8 +137,8 @@
     } else {
       widthPct = Math.min(100, (100 * (now - current.start_time)) / current.duration);
       const fractionLeft = remaining / current.duration;
-      if (fractionLeft <= 0.15) colorClass = "red";
-      else if (fractionLeft <= 0.25) colorClass = "yellow";
+      if (fractionLeft <= CONFIG.warnFractionRed) colorClass = "red";
+      else if (fractionLeft <= CONFIG.warnFractionYellow) colorClass = "yellow";
     }
 
     timerEl.textContent = ST.fmtDuration(remaining);
@@ -202,9 +204,7 @@
   // current text is measured on a canvas and the font size clamped to
   // fit the viewport width and the timer box height, so the largest
   // step reaches zero black border.
-  const FONT_SCALES = [
-    0.33, 0.4, 0.48, 0.58, 0.69, 0.83, 1, 1.2, 1.45, 1.73, 2.07, 2.49, 2.99, 3.58, 4.3,
-  ];
+  const FONT_SCALES = CONFIG.fontScales;
   const FONT_SCALE_KEY = "session-timer:font-scale";
 
   const measureCtx = document.createElement("canvas").getContext("2d");

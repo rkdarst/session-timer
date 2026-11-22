@@ -51,6 +51,18 @@ Allows one to view the events in the session and modify them.  There are control
   remembered per browser (following the OS preference until first
   toggled).  Unlike the room dimming this is local to one admin's
   screen and never synced.
+* A permanent warning banner at the top ("Events are NOT saved long
+  term") — shown only when snapshot persistence is disabled (queried
+  from `GET /api/persistence`) — and a Help button opening a concise
+  popup with the main points (URL = access, times-of-day semantics,
+  cascade, display colors, memory-only data).
+* Toolbar overflow behind a ☰ hamburger menu (top right): display
+  page link, QR code, CSV download/upload, "Reset timezone (this
+  browser)" (forced re-anchor: HH:MM schedule kept, absolute times
+  shift by the timezone difference), "Show raw state" (the JSON as
+  this client sees it), and the dark-mode toggle (shown as "Dark
+  mode: on/off").  The menu auto-closes after any action, on Escape,
+  or on a click anywhere outside it.
 * Download events as csv (`start_time,duration_sec,name`, with
   start_time as `H:MM:SS` service time)
 * Upload events as csv (replacing all current)
