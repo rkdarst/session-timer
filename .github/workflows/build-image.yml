@@ -19,6 +19,15 @@ on:
   pull_request:
   workflow_dispatch:
 
+# A newer run for the same ref cancels older still-running ones, so a
+# burst of pushes does not stack up runs or let a slow OLDER run finish
+# last and push stale code over ghcr.io/...:latest.  Grouping by ref
+# keeps master pushes, PRs, and manual runs on different branches from
+# cancelling each other.
+concurrency:
+  group: build-image-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   packages: write
