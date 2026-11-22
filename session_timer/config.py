@@ -34,6 +34,12 @@ SNAPSHOT_INTERVAL_SECONDS = int(
     os.environ.get("SESSION_TIMER_SNAPSHOT_INTERVAL", "300")
 )
 
+# ------------------------------------------------- default timezone
+# Optional default session timezone (IANA zone name, e.g.
+# "Europe/Berlin"): used when a session has no timezone of its own.
+# Set via the SESSION_TIMER_TZ environment variable.
+DEFAULT_TZ = os.environ.get("SESSION_TIMER_TZ") or None
+
 # ------------------------------------- local server (console script)
 HOST = "127.0.0.1"
 PORT = 8000

@@ -32,4 +32,10 @@ const CONFIG = Object.freeze({
   // Admin page: duration (seconds) of the first "Add event" on an
   // empty session.
   newEventDefaultDuration: 600,
+
+  // Both pages: how often to re-fetch the full state over HTTP while
+  // connected (the WS already pushes every change).  This re-syncs the
+  // server-time skew correction and the session's utc_offset (DST
+  // changes) even when nothing mutates for hours.
+  resyncIntervalMs: 3600 * 1000,
 });

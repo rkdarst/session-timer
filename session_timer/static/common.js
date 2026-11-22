@@ -23,25 +23,39 @@ const ST = (() => {
 
   /**
    * Connect to the session's WebSocket push channel.  Calls onState
-   * with {name, generation, events} whenever the server pushes new
-   * state.  Falls back to 5 s polling of /state while disconnected and
-   * reconnects automatically.
+   * with the current state payload ({name, generation, events, ...})
+   * whenever the server pushes new state.  Falls back to 5 s polling
+   * of /state while disconnected and reconnects automatically; an
+   * hourly /state re-fetch re-syncs the server-time skew and the
+   * session's utc_offset (DST) even when no mutation happens for
+   * hours.  Server-time sync (noteServerTime) is applied centrally so
+   * both pages and every payload path benefit.
    */
   function connect(name, onState) {
     let ws = null;
     let reconnectTimer = null;
     let pollTimer = null;
+    let resyncTimer = null;
+
+    function receive(data) {
+      if (data && Array.isArray(data.events)) {
+        noteServerTime(data.server_time);
+        onState(data);
+      }
+    }
+
+    async function fetchState() {
+      try {
+        const resp = await fetch(apiUrl(name, "/state"));
+        if (resp.ok) receive(await resp.json());
+      } catch (err) {
+        /* offline; retry on next tick */
+      }
+    }
 
     function startPolling() {
       if (pollTimer) return;
-      pollTimer = setInterval(async () => {
-        try {
-          const resp = await fetch(apiUrl(name, "/state"));
-          if (resp.ok) onState(await resp.json());
-        } catch (err) {
-          /* offline; retry on next tick */
-        }
-      }, 5000);
+      pollTimer = setInterval(fetchState, 5000);
     }
 
     function stopPolling() {
@@ -79,7 +93,7 @@ const ST = (() => {
         } catch (err) {
           return;
         }
-        if (data && Array.isArray(data.events)) onState(data);
+        receive(data);
       };
       ws.onclose = () => {
         ws = null;
@@ -92,10 +106,12 @@ const ST = (() => {
     }
 
     open();
+    resyncTimer = setInterval(fetchState, CONFIG.resyncIntervalMs);
     return {
       close() {
         stopPolling();
         if (reconnectTimer) clearTimeout(reconnectTimer);
+        if (resyncTimer) clearInterval(resyncTimer);
         if (ws) ws.close();
       },
     };
@@ -218,16 +234,47 @@ const ST = (() => {
     return h * 3600 + m * 60 + s;
   }
 
-  /** Convert events from service-day seconds to absolute unixtime by
-      adding the session's anchor (unixtime of its "noon minus 12h").
-      Returns [] when the anchor is not set yet, so displays stay blank
-      for sessions created without an anchor. */
-  function absoluteEvents(events, anchor) {
-    if (anchor === null || anchor === undefined) return [];
-    return (events || []).map((ev) => ({
-      ...ev,
-      start_time: anchor + ev.start_time,
-    }));
+  /**
+   * Server-time skew correction: every state payload carries
+   * `server_time` (unixtime); call noteServerTime() with it on every
+   * state receipt, then serverNow() returns the server's idea of
+   * "now", extrapolated with the monotonic performance.now() clock.
+   * Displays with a dead RTC battery self-correct, and an NTP step
+   * mid-session causes no glitch (only drift between syncs, which the
+   * hourly re-sync bounds).
+   */
+  let serverAtSync = null;
+  let perfAtSync = 0;
+
+  function perfNow() {
+    return window.performance ? window.performance.now() : Date.now();
+  }
+
+  function noteServerTime(t) {
+    if (typeof t === "number" && Number.isFinite(t)) {
+      serverAtSync = t;
+      perfAtSync = perfNow();
+    }
+  }
+
+  function serverNow() {
+    if (serverAtSync === null) return Date.now() / 1000;
+    return serverAtSync + (perfNow() - perfAtSync) / 1000;
+  }
+
+  /**
+   * Current wall-clock time of the session's day, in seconds
+   * [0, 86400).  Uses the server-provided utc_offset when available
+   * (so tz-database-less devices work); falls back to this browser's
+   * own offset otherwise.  Wraps at midnight, which restarts the daily
+   * template at "before the first event".
+   */
+  function dayNow(utcOffset) {
+    const offset =
+      typeof utcOffset === "number" && Number.isFinite(utcOffset)
+        ? utcOffset
+        : -new Date().getTimezoneOffset() * 60;
+    return (((serverNow() + offset) % 86400) + 86400) % 86400;
   }
 
   return {
@@ -240,6 +287,8 @@ const ST = (() => {
     fmtDuration,
     fmtServiceTime,
     parseServiceTime,
-    absoluteEvents,
+    noteServerTime,
+    serverNow,
+    dayNow,
   };
 })();

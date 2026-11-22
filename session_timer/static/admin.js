@@ -7,9 +7,15 @@
   const errorBanner = document.getElementById("error-banner");
   const cascadeBox = document.getElementById("cascade");
 
-  let state = { name: name, generation: null, anchor: null, events: [] };
+  let state = {
+    name: name,
+    generation: null,
+    timezone: null,
+    utc_offset: null,
+    events: [],
+  };
   let stale = false;
-  let anchorEnsured = false;
+  let timezoneEnsured = false;
 
   if (!ST.validName(name)) {
     errorBanner.textContent = "Invalid session URL";
@@ -78,37 +84,49 @@
 
   function onState(data) {
     state = data;
+    ST.noteServerTime(data.server_time);
     if (data.generation !== null && data.generation !== undefined) {
       stale = false;
       staleBanner.hidden = true;
     }
-    if (!anchorEnsured) {
-      anchorEnsured = true;
-      ensureAnchor();
+    if (!timezoneEnsured) {
+      timezoneEnsured = true;
+      ensureTimezone();
     }
     updateDimButtons();
     renderTable();
   }
 
-  // ------------------------------------------------ service-day anchor
+  // ------------------------------------------------------ timezone
 
-  /** GTFS-style service times are measured from "noon minus 12h" of the
-      session's day; only the browser knows the intended local day, so
-      the admin page fixes the anchor when it loads (first one wins —
-      the server ignores later calls).  On normal days this is local
-      midnight; on DST-change days it stays unambiguous. */
-  function serviceAnchorForToday() {
-    const now = new Date();
-    const noon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
-    return Math.round(noon.getTime() / 1000) - 12 * 3600;
+  /** This browser's IANA timezone name (e.g. "Europe/Berlin"), or null
+      when the browser cannot report one (old/limited browsers).  The
+      server validates and stores it; clients never resolve offsets
+      themselves (they get utc_offset in every state payload). */
+  function browserTimezone() {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (typeof tz === "string" && tz && tz !== "Etc/Unknown") return tz;
+    } catch (err) {
+      /* no Intl: fall through */
+    }
+    return null;
   }
 
-  function ensureAnchor() {
-    if (state.generation !== null && state.anchor != null) return;
-    fetch("/api/" + encodeURIComponent(name) + "/anchor", {
+  /** The session timezone is fixed by the first admin visit; when the
+      session has none, stamp this browser's — silently, by design
+      (DESIGN.md): the first admin's device is almost always the right
+      clock, and anything else is fixable from the ☰ menu.  Only the
+      server's "event now"/"remaining" features need it; editing works
+      regardless. */
+  function ensureTimezone() {
+    if (state.generation === null || state.timezone != null) return;
+    const tz = browserTimezone();
+    if (!tz) return;
+    fetch("/api/" + encodeURIComponent(name) + "/timezone", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ anchor: serviceAnchorForToday() }),
+      body: JSON.stringify({ timezone: tz }),
     })
       .then((resp) => (resp.ok ? resp.json() : null))
       .then((data) => {
@@ -116,19 +134,15 @@
       })
       .catch(() => {
         /* WS/polling will refresh; client-side editing works without
-           the anchor, only server-side "event now" needs it. */
+           the timezone, only server-side "event now" needs it. */
       });
   }
 
-  /** Now as service-day seconds (anchor is set on page load). */
+  /** Now of day in the session timezone (server time + utc_offset,
+      wrapped at midnight).  Falls back to local time until the server
+      sends an offset. */
   function nowDaySeconds() {
-    return Math.floor(Date.now() / 1000 - state.anchor);
-  }
-
-  /** Events converted to absolute unixtime for countdown / current-event
-      comparisons (raw state.events hold service-day seconds). */
-  function absEvents() {
-    return ST.absoluteEvents(state.events, state.anchor);
+    return Math.floor(ST.dayNow(state.utc_offset));
   }
 
   // -------------------------------------------------- table rendering
@@ -329,8 +343,8 @@
       glance.  The countdown goes negative after expiry until the next
       event starts, exactly like the display. */
   function updateRemaining() {
-    const now = Date.now() / 1000;
-    const current = ST.currentEvent(absEvents(), now);
+    const now = nowDaySeconds();
+    const current = ST.currentEvent(state.events, now);
     const currentId = current ? current.id : null;
     for (const tr of tbody.rows) {
       const isCurrent = tr.dataset.eid === currentId;
@@ -465,20 +479,21 @@
     if (!menu.hidden && !dropdown.contains(event.target)) menu.hidden = true;
   });
 
-  // ------------------------------------ timezone reset (re-anchor)
+  // -------------------------------------- set timezone (re-base)
 
-  // Deliberate escape hatch for the first-anchor-wins rule: keep every
-  // event's service-day seconds (the HH:MM column is unchanged) but
-  // re-base the day on this browser's timezone.  Absolute times —
+  // Deliberate escape hatch for the first-timezone-wins rule: keep every
+  // event's seconds-of-day (the HH:MM column is unchanged) but make the
+  // schedule follow this browser's timezone instead.  Absolute times —
   // including any running event — shift by the timezone difference.
-  document.getElementById("reset-anchor").addEventListener("click", () => {
-    if (state.anchor == null) {
-      error("Session is not initialized yet — try again in a moment");
+  document.getElementById("set-timezone").addEventListener("click", () => {
+    const tz = browserTimezone();
+    if (!tz) {
+      error("This browser cannot report its timezone");
       return;
     }
     if (
       !window.confirm(
-        "Re-anchor this session to this browser's timezone?\n\n" +
+        "Make this session follow this browser's timezone (" + tz + ")?\n\n" +
           "The schedule's HH:MM times stay the same, but they will now " +
           "mean this browser's local time; running and upcoming events " +
           "shift by the timezone difference."
@@ -487,8 +502,8 @@
       return;
     }
     guard(async () => {
-      await mutate("/anchor", "POST", {
-        anchor: serviceAnchorForToday(),
+      await mutate("/timezone", "POST", {
+        timezone: tz,
         force: true,
       });
     });
@@ -588,14 +603,13 @@
 
   document.getElementById("add-event").addEventListener("click", () => {
     guard(async () => {
-      if (state.anchor == null) {
-        error("Session is not initialized yet — try again in a moment");
-        return;
-      }
       // Default: chained after the final event (same duration), so a
       // run of events just extends the schedule.  With no events yet,
-      // start at the current time (rounded down to the minute) for
-      // CONFIG.newEventDefaultDuration.  Times are service-day seconds.
+      // start at the current time of day (rounded down to the minute)
+      // for CONFIG.newEventDefaultDuration.  Times are wall-clock
+      // seconds of day in the session timezone.  Note: chaining past
+      // midnight is rejected by the server (400) — the last event's
+      // end must stay within the day for the next start.
       const events = sortedEvents();
       const last = events.length > 0 ? events[events.length - 1] : null;
       const start = last ? last.start_time + last.duration : Math.floor(nowDaySeconds() / 60) * 60;

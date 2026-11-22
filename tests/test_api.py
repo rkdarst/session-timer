@@ -33,7 +33,7 @@ def add_event(client, generation, name, start, duration):
 
 
 def test_event_name_too_long_rejected(client):
-    client.post(f"/api/{NAME}/anchor", json={"anchor": 1700000000})
+    client.post(f"/api/{NAME}/timezone", json={"timezone": "Europe/Berlin"})
     r = add_event(client, 1, "x" * 129, 100, 60)
     assert r.status_code == 400
     state = client.get(f"/api/{NAME}/state").json()
@@ -66,6 +66,50 @@ def test_max_events_rejected_via_csv_upload(client):
     assert [e["name"] for e in state["events"]] == ["keep"]
 
 
+def test_add_event_start_outside_day_rejected(client):
+    r = add_event(client, 0, "too late", 86400, 60)
+    assert r.status_code == 400
+    assert "midnight" in r.json()["detail"]
+    assert add_event(client, 0, "also bad", -60, 60).status_code == 400
+    # boundary: 86399 is the last valid second of the day
+    assert add_event(client, 0, "just fits", 86399, 1).status_code == 200
+
+
+def test_csv_upload_rejects_start_at_or_past_midnight(client):
+    # Exports from the pre-2026 anchor-based model can contain
+    # >=24:00:00 times; reject them with a clear, actionable error.
+    r = client.put(
+        f"/api/{NAME}/events.csv",
+        content="24:00:00,60,after midnight\n",
+        headers={**gen(0), "Content-Type": "text/csv"},
+    )
+    assert r.status_code == 400
+    assert "midnight" in r.json()["detail"]
+    assert store.get(NAME).events == []
+
+
+def test_csv_upload_accepts_23_59_59(client):
+    r = client.put(
+        f"/api/{NAME}/events.csv",
+        content="23:59:59,1,last one\n",
+        headers={**gen(0), "Content-Type": "text/csv"},
+    )
+    assert r.status_code == 200
+    assert [e["start_time"] for e in r.json()["events"]] == [86399]
+
+
+def test_shift_endpoint_rejects_cascade_past_midnight(client):
+    first = add_event(client, 0, "a", 86300, 10).json()["events"][0]
+    add_event(client, 1, "b", 86350, 10)
+    r = client.post(
+        f"/api/{NAME}/events/{first['id']}/shift",
+        json={"field": "start_time", "delta": 100, "cascade": True},
+        headers=gen(2),
+    )
+    assert r.status_code == 400
+    assert "midnight" in r.json()["detail"]
+
+
 def test_session_cap_returns_503(client):
     from session_timer.store import Session
 
@@ -95,14 +139,15 @@ def test_session_cap_returns_503(client):
 def test_state_empty_session_does_not_create(client):
     resp = client.get(f"/api/{NAME}/state")
     assert resp.status_code == 200
-    assert resp.json() == {
-        "name": NAME,
-        "generation": None,
-        "anchor": None,
-        "font_scale": 1.0,
-        "dim_level": 0.0,
-        "events": [],
-    }
+    data = resp.json()
+    assert data["name"] == NAME
+    assert data["generation"] is None
+    assert data["timezone"] is None
+    assert data["utc_offset"] is None
+    assert isinstance(data["server_time"], float)
+    assert data["font_scale"] == 1.0
+    assert data["dim_level"] == 0.0
+    assert data["events"] == []
     assert store.get(NAME) is None  # read-only path never creates
 
 
@@ -186,8 +231,10 @@ def test_delete_event_and_404(client):
 
 
 def test_event_now_creates_event_starting_now(client):
-    anchor = 1700000000
-    assert client.post(f"/api/{NAME}/anchor", json={"anchor": anchor}).status_code == 200
+    assert (
+        client.post(f"/api/{NAME}/timezone", json={"timezone": "UTC"}).status_code
+        == 200
+    )
     resp = client.post(
         f"/api/{NAME}/events/now",
         json={"name": "now", "duration": 600},
@@ -195,11 +242,16 @@ def test_event_now_creates_event_starting_now(client):
     )
     assert resp.status_code == 200
     event = resp.json()["events"][0]
-    # start_time is service-day seconds: now minus the day anchor
-    assert abs(event["start_time"] - (time.time() - anchor)) < 5
+    # start_time is wall-clock seconds of day in the session timezone
+    # (UTC here): server time of day, independent of any anchor date.
+    now_utc = time.gmtime()
+    day_seconds = now_utc.tm_hour * 3600 + now_utc.tm_min * 60 + now_utc.tm_sec
+    assert abs(event["start_time"] - day_seconds) < 5 or abs(
+        event["start_time"] - day_seconds
+    ) > 86390  # midnight wrap between the two reads
 
 
-def test_event_now_without_anchor_400(client):
+def test_event_now_without_timezone_400(client):
     resp = client.post(
         f"/api/{NAME}/events/now",
         json={"name": "now", "duration": 600},
@@ -208,9 +260,8 @@ def test_event_now_without_anchor_400(client):
     assert resp.status_code == 400
 
 
-def test_patch_remaining_uses_anchor(client):
-    anchor = 1700000000
-    client.post(f"/api/{NAME}/anchor", json={"anchor": anchor})
+def test_patch_remaining_uses_timezone(client):
+    client.post(f"/api/{NAME}/timezone", json={"timezone": "UTC"})
     event_id = add_event(client, 1, "", 100, 600).json()["events"][0]["id"]
     resp = client.patch(
         f"/api/{NAME}/events/{event_id}",
@@ -219,20 +270,30 @@ def test_patch_remaining_uses_anchor(client):
     )
     assert resp.status_code == 200
     event = resp.json()["events"][0]
-    assert abs(event["start_time"] - (time.time() - anchor + 60)) < 5
+    # start = server's day-seconds-now + 60, so it must be within a
+    # minute of the current UTC time of day
+    now_utc = time.gmtime()
+    day_seconds = now_utc.tm_hour * 3600 + now_utc.tm_min * 60 + now_utc.tm_sec
+    delta = (event["start_time"] - (day_seconds + 60)) % 86400
+    assert delta < 5
 
 
-def test_set_anchor_endpoint(client):
-    resp = client.post(f"/api/{NAME}/anchor", json={"anchor": 1700000000})
+def test_set_timezone_endpoint(client):
+    resp = client.post(f"/api/{NAME}/timezone", json={"timezone": "Europe/Berlin"})
     assert resp.status_code == 200
     data = resp.json()
-    assert data["anchor"] == 1700000000
-    assert data["generation"] == 1  # creation (0) + anchor bump
+    assert data["timezone"] == "Europe/Berlin"
+    assert data["utc_offset"] is not None  # resolved server-side
+    assert data["server_time"] > 0
+    assert data["generation"] == 1  # creation (0) + timezone bump
     assert store.get(NAME) is not None
-    # a second POST is a no-op: the first anchor wins
-    resp = client.post(f"/api/{NAME}/anchor", json={"anchor": 1800000000})
-    assert resp.json()["anchor"] == 1700000000
+    # a second POST is a no-op: the first timezone wins
+    resp = client.post(f"/api/{NAME}/timezone", json={"timezone": "UTC"})
+    assert resp.json()["timezone"] == "Europe/Berlin"
     assert resp.json()["generation"] == 1
+    # invalid names are rejected with a clear 400
+    resp = client.post(f"/api/{NAME}/timezone", json={"timezone": "not a zone!"})
+    assert resp.status_code == 400
 
 
 
@@ -284,6 +345,7 @@ def test_pages_served(client):
         (f"/{NAME}/", "Events are NOT saved long term"),
         (f"/{NAME}/", "show-help"),
         (f"/{NAME}/", "menu-btn"),
+        (f"/{NAME}/", "set-timezone"),
         (f"/{NAME}/", "config.js"),
         (f"/{NAME}/display", 'id="timer"'),
         (f"/{NAME}/display", "config.js"),
@@ -293,26 +355,30 @@ def test_pages_served(client):
         assert marker in resp.text
 
 
-def test_anchor_reset_force(client):
-    """The admin menu's "Reset timezone": re-anchor keeping day-seconds."""
-    r = client.post(f"/api/{NAME}/anchor", json={"anchor": 1700000000})
+def test_timezone_reset_force(client):
+    """The admin menu's "Set timezone to this browser": re-set keeping
+    day-seconds."""
+    r = client.post(f"/api/{NAME}/timezone", json={"timezone": "Europe/Berlin"})
     assert r.status_code == 200
     assert add_event(client, 1, "evt", 3600, 600).status_code == 200
 
-    # Plain re-post stays a no-op (first anchor wins)...
-    r = client.post(f"/api/{NAME}/anchor", json={"anchor": 1700036000})
-    assert r.json()["anchor"] == 1700000000
+    # Plain re-post stays a no-op (first timezone wins)...
+    r = client.post(f"/api/{NAME}/timezone", json={"timezone": "UTC"})
+    assert r.json()["timezone"] == "Europe/Berlin"
 
-    # ...but force re-anchors while keeping every event's day-seconds.
-    r = client.post(f"/api/{NAME}/anchor", json={"anchor": 1700036000, "force": True})
+    # ...but force re-sets the zone while keeping every day-second.
+    r = client.post(
+        f"/api/{NAME}/timezone", json={"timezone": "UTC", "force": True}
+    )
     assert r.status_code == 200
     data = r.json()
-    assert data["anchor"] == 1700036000
+    assert data["timezone"] == "UTC"
+    assert data["utc_offset"] == 0
     assert data["events"][0]["start_time"] == 3600
-    assert data["generation"] == 3  # anchor + add_event + re-anchor
+    assert data["generation"] == 3  # timezone + add_event + re-set
 
     # Repeat with the same value: no generation bump (no spurious push).
-    r = client.post(f"/api/{NAME}/anchor", json={"anchor": 1700036000, "force": True})
+    r = client.post(f"/api/{NAME}/timezone", json={"timezone": "UTC", "force": True})
     assert r.json()["generation"] == 3
 
 
@@ -334,14 +400,12 @@ def test_persistence_endpoint(client, monkeypatch):
 def test_websocket_initial_state_and_push(client):
     with client.websocket_connect(f"/api/{NAME}/ws") as ws:
         initial = ws.receive_json()
-        assert initial == {
-            "name": NAME,
-            "generation": None,
-            "anchor": None,
-            "font_scale": 1.0,
-            "dim_level": 0.0,
-            "events": [],
-        }
+        assert initial["name"] == NAME
+        assert initial["generation"] is None
+        assert initial["timezone"] is None
+        assert initial["utc_offset"] is None
+        assert initial["events"] == []
+        assert initial["server_time"] > 0
 
         # a mutation over HTTP is pushed to the connected client
         resp = add_event(client, 0, "pushed", 1000, 600)
@@ -362,7 +426,7 @@ def test_websocket_initial_state_and_push(client):
 
 
 def test_font_scale_syncs_without_generation_change(client):
-    client.post(f"/api/{NAME}/anchor", json={"anchor": 1700000000})
+    client.post(f"/api/{NAME}/timezone", json={"timezone": "Europe/Berlin"})
     before = client.get(f"/api/{NAME}/state").json()["generation"]
     r = client.put(f"/api/{NAME}/font-scale", json={"scale": 1.73})
     assert r.status_code == 200
@@ -389,7 +453,7 @@ def test_font_scale_never_creates_session(client):
 
 
 def test_dim_level_syncs_without_generation_change(client):
-    client.post(f"/api/{NAME}/anchor", json={"anchor": 1700000000})
+    client.post(f"/api/{NAME}/timezone", json={"timezone": "Europe/Berlin"})
     before = client.get(f"/api/{NAME}/state").json()["generation"]
     r = client.put(f"/api/{NAME}/dim", json={"level": 0.5})
     assert r.status_code == 200

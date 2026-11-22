@@ -38,7 +38,7 @@
       <button id="download-csv">Download CSV</button>
       <button id="upload-csv-btn">Upload CSV</button>
       <input type="file" id="upload-csv" accept=".csv,text/csv" hidden>
-      <button id="reset-anchor" title="Re-anchor the session to this browser's timezone: the HH:MM schedule stays, absolute times shift">Reset timezone (this browser)</button>
+      <button id="set-timezone" title="Make the session follow this browser's timezone: the HH:MM schedule stays, absolute times shift">Set timezone to this browser</button>
       <button id="show-state" title="Show the raw JSON state as this client sees it">Show raw state</button>
       <button id="toggle-theme" title="Toggle dark mode (this screen only)">Dark mode: off</button>
     </div>
@@ -78,14 +78,17 @@
       <li><b>The URL is everything.</b> Anyone with the session URL can view
         or edit; there is no login. Share the display page via the QR code
         and keep the admin URL to yourself.</li>
-      <li><b>Times are times of day</b> (24-hour HH:MM, your browser's
-        timezone &mdash; fixed by the first admin visit). "Add event" chains
-        onto the last one; "Event now" starts one immediately.</li>
+      <li><b>Times are times of day</b> (24-hour HH:MM). The session
+        follows one timezone &mdash; fixed by the first admin visit; ☰ &rarr;
+        "Set timezone to this browser" on a device in the right room if it
+        is wrong. At that zone's midnight the day resets, so the same
+        schedule runs again tomorrow; events cannot start past 23:59:59.</li>
       <li><b>+/- nudge by a minute.</b> With "delay later events" checked,
         they cascade to everything starting after (shown in the Gap
         column; negative = overlap, not blocked).</li>
       <li><b>Everything syncs live</b> across all open panels. If someone
-        else edits while you do, you'll be asked to refresh.</li>
+        else edits while you do, you'll be asked to refresh. Displays do
+        not need a correct clock &mdash; time comes from the server.</li>
       <li><b>Display colors:</b> green, yellow at &le;25% left, red at
         &le;15%; after expiry it flashes for 5 minutes, then idles at a
         grey 00:00.</li>

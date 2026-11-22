@@ -33,11 +33,17 @@ Phases 1–4 are implemented and verified:
   and a Help button opens a concise popup
 - Verified live with uvicorn: pages 200, 409 on stale generation, CSV
   round-trip, WebSocket initial state + push + ping/pong
-- Times are GTFS-style **service times** (seconds since the session's
-  "noon − 12h" anchor): admin start column shows/edits `HH:MM`, CSV is
-  `H:MM:SS`, sessions carry an `anchor` set by the first admin browser
-  (`POST /api/{name}/anchor`), and clients convert to absolute unixtime
-  via `ST.absoluteEvents` for countdowns
+- Times are **wall-clock times of day** in the session timezone
+  (seconds of day in `[0, 86400)`; sessions are reusable daily
+  templates that reset at the zone's midnight): admin start column
+  shows/edits `HH:MM`, CSV is `H:MM:SS` (uploads at/past 24:00:00
+  rejected).  Sessions carry an IANA `timezone` stamped by the first
+  admin browser (`POST /api/{name}/timezone`, force-resettable from
+  the menu); the server resolves `utc_offset` (zoneinfo) and
+  broadcasts it with `server_time` in every state payload; clients
+  compute now-of-day via `ST.dayNow(utc_offset)` (server-time skew
+  correction in `ST.noteServerTime`/`ST.serverNow`, hourly `/state`
+  re-sync)
 
 Run it:
 
@@ -89,9 +95,13 @@ render time.
 ### Phase 1: server core (`store.py`)
 
 1. `Session` dataclass: `name`, `generation: int`, `events: list[Event]`,
-   `anchor: int | None` (unixtime of the session's "noon minus 12h").
-2. `Event` dataclass: `name: str = ""`, `start_time: int` (service-day
-   seconds since the anchor), `duration: int` (seconds).
+   `timezone: str | None` (IANA zone name; server resolves the current
+   UTC offset via `zoneinfo` — fail-open to None when unresolvable or
+   missing tzdata; `config.DEFAULT_TZ` from `SESSION_TIMER_TZ` is the
+   fallback).
+2. `Event` dataclass: `name: str = ""`, `start_time: int` (wall-clock
+   seconds of day, validated to `[0, 86400)` on add/update/shift), 
+   `duration: int` (seconds).
 3. `SessionStore`: dict `name -> Session`, guarded by a single
    `asyncio.Lock` (or plain dict ops — single worker, atomic enough for
    GIL-level ops, but prefer the lock for clarity).
@@ -113,14 +123,15 @@ Routes (all JSON where applicable):
 - Admin mutation endpoints (all check `generation` from client; on
   mismatch return 409 `{error: "stale", generation}` and the client
   shows "state changed, please refresh" — per DESIGN.md line 12):
-  - `POST /api/{name}/anchor` — set the session's service-day anchor
-    (first value wins; admin page posts "local noon − 12h" on load)
+  - `POST /api/{name}/timezone` — set the session's IANA timezone
+    (first value wins; admin page posts `Intl`'s zone name on load;
+    `force: true` re-sets it keeping event day-seconds)
   - `POST /api/{name}/events` — add event
   - `DELETE /api/{name}/events/{event_id}`
   - `PATCH /api/{name}/events/{event_id}` — set start/end/duration/
     remaining (server converts between representations; remaining ⇒
-    `start_time = now + remaining` with `now = unixtime - anchor`,
-    end ⇒ `duration = end - start`)
+    `start_time = now + remaining` with `now` = the session zone's
+    current seconds of day, end ⇒ `duration = end - start`)
   - `POST /api/{name}/events/{event_id}/shift` — body
     `{field: "start_time"|"duration", delta: int, cascade: true}`;
     with cascade, apply same delta to all events with greater
@@ -129,7 +140,7 @@ Routes (all JSON where applicable):
     starting at now with given duration
   - `GET /api/{name}/events.csv` — download, columns
     `start_time,duration_sec,name` with start_time as `H:MM:SS`
-    service time (header row, this order)
+    time of day (header row, this order)
   - `PUT /api/{name}/events.csv` — upload, **replaces** all events
 
 Clients send their known `generation` in the request (header
@@ -138,12 +149,15 @@ Clients send their known `generation` in the request (header
 
 ### Phase 3: display UI (`display.html`/`display.js`)
 
-1. Connect WS; fall back to polling `state` every 5 s if WS fails.
+1. Connect WS; fall back to polling `state` every 5 s if WS fails
+   (plus an hourly `/state` re-fetch for skew/DST re-sync, from
+   `CONFIG.resyncIntervalMs`).
 2. Local ticking with `requestAnimationFrame`/`setInterval(…, 250)`;
-   convert service-day times to absolute unixtime once on state receipt
-   (`ST.absoluteEvents(events, anchor)`), then render from
-   `end_time = start_time + duration` minus local now.  Never count
-   stored seconds down — always derive from unixtime.
+   on every state receipt `ST.noteServerTime(data.server_time)`
+   anchors the client clock to the server (extrapolated on monotonic
+   `performance.now()`), then render from
+   `ST.dayNow(utc_offset)` vs `end_time = start_time + duration`.
+   Never count stored seconds down — always derive from server time.
 3. Current event: greatest `start_time <= now`; show it until next
    event's `start_time`.  Overlaps: most recently started wins.
 4. No current countdown (no event yet, or `FLASH_LIMIT` = 5 min after
@@ -241,11 +255,14 @@ Clients send their known `generation` in the request (header
 ## Conventions / constraints
 
 - Python stdlib + FastAPI only; no frontend build tooling.
-- Times are GTFS-style **service times**: stored in memory and on the
-  wire as seconds since the session's "noon minus 12h" anchor; admin
-  enters/displays `HH:MM`, CSV uses `H:MM:SS`; clients convert to
-  absolute unixtime with the session anchor.  Timezone handling only
-  in the browser (the anchor comes from the first admin browser).
+- Times are **wall-clock times of day** in the session timezone:
+  stored in memory and on the wire as seconds of day `[0, 86400)`;
+  admin enters/displays `HH:MM`, CSV uses `H:MM:SS` (uploads at/past
+  24:00:00 rejected).  The session stores an IANA `timezone` (first
+  admin browser stamps it; force-resettable); the server resolves the
+  current `utc_offset` with `zoneinfo` and sends `server_time` +
+  `utc_offset` in every state payload — clients never resolve zones
+  and need no correct local clock (skew correction in common.js).
 - Security = URL secrecy only; do not add auth.
 - Never persist to disk; never spawn multiple workers.
 - Don't modify `README.md` unless asked; keep `DESIGN.md` as the

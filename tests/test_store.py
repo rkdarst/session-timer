@@ -2,6 +2,7 @@
 
 import pytest
 
+from session_timer import config
 from session_timer.store import (
     Event,
     Session,
@@ -149,9 +150,9 @@ def test_shift_without_cascade():
     assert [e.start_time for e in session.events] == [150, 200]
 
 
-def test_shift_earlier_event_does_not_move_later_anchor():
-    # Events starting before the anchor are unaffected even if the
-    # anchor moves before/after them.
+def test_shift_earlier_event_does_not_move_later_events():
+    # Events starting before the shifted one are unaffected even when
+    # the shift moves it before/after them.
     session = make_session(("a", 100, 10), ("b", 200, 10))
     b = session.events[1]
     session.shift(b.id, "start_time", -150, cascade=True)
@@ -348,10 +349,15 @@ def test_session_cap_eviction_runs_expiry_first():
 # ------------------------------------------------- snapshot persistence
 
 
+def without_server_time(d: dict) -> dict:
+    """Strip the serialization timestamp (not session state)."""
+    return {k: v for k, v in d.items() if k != "server_time"}
+
+
 def test_snapshot_roundtrip_preserves_everything(tmp_path):
     store = SessionStore()
     session = store.get_or_create("demo")
-    session.set_anchor(1700000000)
+    session.set_timezone("Europe/Berlin")
     e1 = session.add_event("café ☕", 100, 60)
     session.add_event("second", 200, 30)
     session.shift(e1.id, "duration", 10)
@@ -366,7 +372,8 @@ def test_snapshot_roundtrip_preserves_everything(tmp_path):
     assert restored.load_snapshot(path) is True
     rsession = restored.get("demo")
     assert rsession is not None
-    assert rsession.to_dict() == original
+    assert without_server_time(rsession.to_dict()) == without_server_time(original)
+    assert rsession.timezone == "Europe/Berlin"
     # event ids survive so admin rows stay valid across restarts
     assert rsession.find_event(e1.id).name == "café ☕"
     # the restored store keeps working (generation continues)
@@ -401,7 +408,7 @@ def test_load_snapshot_wrong_version_quarantined(tmp_path):
 def test_snapshot_roundtrip_unicode(tmp_path):
     store = SessionStore()
     s = store.get_or_create("ünïcode")
-    s.set_anchor(1700000000)
+    s.set_timezone("Europe/Berlin")
     s.add_event("日本語", 0, 60)
     path = tmp_path / "sessions.json"
     store.save_snapshot(path)
@@ -445,60 +452,130 @@ def test_parse_service_time():
         parse_service_time("")
 
 
-# --------------------------------------------------------------- anchor
+# ------------------------------------------------- start-time range
 
-
-def test_set_anchor_sets_and_bumps():
+def test_add_event_rejects_start_outside_one_day():
     session = Session(name="t")
-    assert session.anchor is None
-    assert session.set_anchor(1726000000) is True
-    assert session.anchor == 1726000000
+    with pytest.raises(ValueError, match="0:00"):
+        session.add_event("", -1, 60)
+    with pytest.raises(ValueError, match="midnight"):
+        session.add_event("", 86400, 60)
+    with pytest.raises(ValueError, match="midnight"):
+        session.add_event("", 90000, 60)
+    assert session.events == []
+    assert session.generation == 0  # rejected mutations change nothing
+
+
+def test_update_event_rejects_start_outside_one_day():
+    session = make_session(("a", 86300, 60))
+    event = session.events[0]
+    with pytest.raises(ValueError, match="midnight"):
+        session.update_event(event.id, start_time=86400)
+    # a "remaining" that lands past midnight is rejected too
+    with pytest.raises(ValueError, match="midnight"):
+        session.update_event(event.id, remaining=600, now=86300)
+    # ...and nothing changed
+    assert event.start_time == 86300
     assert session.generation == 1
 
 
-def test_set_anchor_first_wins():
+def test_shift_rejects_result_outside_one_day():
+    session = make_session(("a", 86300, 60), ("b", 86400 - 90, 30))
+    a, b = session.events
+    with pytest.raises(ValueError, match="'a'"):
+        session.shift(a.id, "start_time", 100, cascade=False)
+    # cascading past midnight: the *later* event is the offender
+    with pytest.raises(ValueError, match="cascade"):
+        session.shift(a.id, "start_time", 100, cascade=True)
+    assert [e.start_time for e in session.events] == [86300, 86310]
+    assert session.generation == 2  # make_session added 2; shifts all rejected
+
+
+def test_shift_cascade_ok_when_result_stays_in_range():
+    session = make_session(("a", 3600, 600), ("b", 7200, 600))
+    a = session.events[0]
+    session.shift(a.id, "start_time", 600, cascade=True)
+    assert [e.start_time for e in session.events] == [4200, 7800]
+
+
+# ----------------------------------------------------- timezone
+
+
+def test_set_timezone_sets_and_bumps():
     session = Session(name="t")
-    session.set_anchor(1000)
-    assert session.set_anchor(2000) is False
-    assert session.anchor == 1000
+    assert session.timezone is None
+    assert session.set_timezone("Europe/Berlin") is True
+    assert session.timezone == "Europe/Berlin"
+    assert session.generation == 1
+
+
+def test_set_timezone_first_wins():
+    session = Session(name="t")
+    session.set_timezone("Europe/Berlin")
+    assert session.set_timezone("UTC") is False
+    assert session.timezone == "Europe/Berlin"
     assert session.generation == 1  # no-op did not bump
 
 
-def test_set_anchor_validates():
+def test_set_timezone_validates():
     session = Session(name="t")
     with pytest.raises(ValueError):
-        session.set_anchor(0)
+        session.set_timezone(12345)
     with pytest.raises(ValueError):
-        session.set_anchor("nope")
-    assert session.anchor is None
+        session.set_timezone("has spaces")
+    with pytest.raises(ValueError):
+        session.set_timezone("x" * 65)
+    assert session.timezone is None
     assert session.generation == 0  # nothing changed
 
 
-def test_set_anchor_force_rebases_day_but_keeps_events():
+def test_set_timezone_force_rebases_zone_but_keeps_events():
     session = make_session(("a", 3600, 600), ("b", 7200, 600))
-    session.set_anchor(1000)
+    session.set_timezone("Europe/Berlin")
     generation = session.generation
 
     # Without force: still first-write-wins.
-    assert session.set_anchor(2000) is False
-    assert session.anchor == 1000
+    assert session.set_timezone("UTC") is False
+    assert session.timezone == "Europe/Berlin"
     assert session.generation == generation
 
-    # Forced re-anchor: day-seconds untouched, generation bumps, and a
+    # Forced re-set: day-seconds untouched, generation bumps, and a
     # repeat with the same value is a no-op (no spurious broadcast).
-    assert session.set_anchor(2000, force=True) is True
-    assert session.anchor == 2000
+    assert session.set_timezone("UTC", force=True) is True
+    assert session.timezone == "UTC"
     assert [e.start_time for e in session.events] == [3600, 7200]
     assert session.generation == generation + 1
-    assert session.set_anchor(2000, force=True) is False
+    assert session.set_timezone("UTC", force=True) is False
     assert session.generation == generation + 1
 
 
-def test_to_dict_includes_anchor():
+def test_resolved_utc_offset():
     session = Session(name="t")
-    assert session.to_dict()["anchor"] is None
-    session.set_anchor(12345)
-    assert session.to_dict()["anchor"] == 12345
+    assert session.set_timezone("UTC") is True
+    assert session.resolved_utc_offset() == 0
+    # Unresolvable names fail open (None), they do not raise.
+    session.set_timezone("Etc/NotAZone", force=True)
+    assert session.resolved_utc_offset() is None
+    # No timezone at all: falls back to config.DEFAULT_TZ (or None).
+    session.timezone = None
+    assert session.resolved_utc_offset() is None
+    config.DEFAULT_TZ = "UTC"
+    try:
+        assert session.resolved_utc_offset() == 0
+    finally:
+        config.DEFAULT_TZ = None
+
+
+def test_to_dict_includes_timezone_and_server_time():
+    session = Session(name="t")
+    data = session.to_dict()
+    assert data["timezone"] is None
+    assert data["utc_offset"] is None
+    assert isinstance(data["server_time"], float)
+    session.set_timezone("UTC")
+    data = session.to_dict()
+    assert data["timezone"] == "UTC"
+    assert data["utc_offset"] == 0
 
 
 def test_update_event_remaining_requires_now():

@@ -7,13 +7,17 @@ As a basic usage, there is a web timer for one event that counts down until an a
 
 ## Data model
 
-There are **sessions** at URL `/SESSION_NAME/`.  Simply navigating to a URL returns the empty session and making some active changes in the browser creates a session that gets synced (opening the admin page also fixes the session's day anchor, which creates it).  Multiple admins (and displays) should be able to access at the same time and updates get pushed to all connected clients dynamically and immediately.
+There are **sessions** at URL `/SESSION_NAME/`.  Simply navigating to a URL returns the empty session and making some active changes in the browser creates a session that gets synced (opening the admin page also stamps the session's timezone, which creates it).  Multiple admins (and displays) should be able to access at the same time and updates get pushed to all connected clients dynamically and immediately.
 
 The server holds canonical state, and any old state by clients is ignored.  Add a generation counter to detect old state by clients.  State is fully dynamic.  Admin clients shouldn't have old state, since updates get pushed to them immediately (if someone is currently editing, sorry).  So, if the state changes under an admin, it gets a push with the new generation number.  Any updates with this old state get rejected (should be infrequent - only on network difficulties) with a message to the admin and being told to refresh.
 
-Each session has multiple **events** which have a {name (optional), start_time, duration}.  Of course, there can be UI for setting other things, for example duration and end time.  Times follow the GTFS "service time" convention: `start_time` is **seconds since "noon minus 12 hours" of the session's day** — effectively local midnight, but defined via the UTC offset in effect *at noon*, so the hours around a daylight-saving change stay unambiguous (no repeated or missing hour).  Times are entered and displayed as `HH:MM` (24-hour, browser-local); CSV uses `H:MM:SS`.  Durations are plain seconds and `end = start + duration`.
+Each session has multiple **events** which have a {name (optional), start_time, duration}.  Of course, there can be UI for setting other things, for example duration and end time.  Times are **wall-clock times of day** in the session's timezone: `start_time` is seconds of day in `[0, 86400)` (i.e. between 0:00:00 and 23:59:59); events cannot start at or past midnight.  Times are entered and displayed as `HH:MM` (24-hour); CSV uses `H:MM:SS`.  Durations are plain seconds and `end = start + duration`.
 
-Each session carries an **anchor**: the unixtime of its "noon minus 12h", computed by the first admin browser that opens the session (only the browser knows the intended local day; the server stays timezone-agnostic) and fixed from then on.  Clients convert service times to absolute times with it (`absolute = anchor + start_time`), so countdowns are exact and every viewer sees the admin's schedule.  A session covers a single day; sessions are meant to be created on the day they are used.
+Each session carries a **timezone**: an IANA zone name (e.g. `Europe/Berlin`), stamped by the first admin browser that opens the session (only the browser knows which room's clock the schedule follows) and fixed from then on.  The *server* resolves the zone's current UTC offset (via stdlib `zoneinfo`) at each serialization and broadcasts it as `utc_offset` in every state payload, together with `server_time` (the server's unixtime).  Clients need no timezone database and no correct clock of their own: they compute the current time of day as `(server_time + utc_offset) mod 86400`, anchoring to `server_time` and extrapolating on the monotonic `performance.now()` clock — so a display with a dead RTC battery self-corrects, and an NTP step mid-session causes no glitch.  An hourly `/state` re-fetch re-syncs the skew and picks up DST changes.
+
+Sessions are **reusable daily templates**: at the session timezone's local midnight the day wraps back to 0 and the session returns to "before the first event", so the same schedule runs again the next day without any edit.  This is why times are times of day rather than dates: the session must remember *which clock it follows*, not *which day it is*.  Accepted consequences: on DST-change nights an event in the repeated/missing hour occurs once per wall-clock label (whatever the zone's current offset makes of it); a post-expiry flash is cut off at midnight; and old CSV exports with starts at or past 24:00:00 are rejected with an explanatory error.  If the server cannot resolve the zone name (e.g. no tz database installed) it fails open: the timezone is still stored, but `utc_offset` is sent as null and clients fall back to their own local clocks.  A deployment-wide default can be set with the `SESSION_TIMER_TZ` environment variable (used when a session has no timezone of its own).
+
+The timezone can be replaced from the admin menu ("Set timezone to this browser"): the HH:MM schedule is kept, but it now means the new zone's wall clock (absolute times shift by the zone difference).  Setting the timezone is silent — no banner, prompt, or hint: the first admin browser stamps the session automatically, and a mismatch (e.g. a laptop in the organizer's home timezone editing a venue schedule in another zone) is harmless by design since the schedule's HH:MM numbers never change; the menu item is the explicit fix if the first admin's browser was in the wrong zone.
 
 
 ## Interface
@@ -57,14 +61,16 @@ Allows one to view the events in the session and modify them.  There are control
   popup with the main points (URL = access, times-of-day semantics,
   cascade, display colors, memory-only data).
 * Toolbar overflow behind a ☰ hamburger menu (top right): display
-  page link, QR code, CSV download/upload, "Reset timezone (this
-  browser)" (forced re-anchor: HH:MM schedule kept, absolute times
-  shift by the timezone difference), "Show raw state" (the JSON as
-  this client sees it), and the dark-mode toggle (shown as "Dark
-  mode: on/off").  The menu auto-closes after any action, on Escape,
-  or on a click anywhere outside it.
+  page link, QR code, CSV download/upload, "Set timezone to this
+  browser" (forced re-set of the session timezone: HH:MM schedule
+  kept, absolute times shift by the zone difference), "Show raw
+  state" (the JSON as this client sees it, including `server_time` —
+  a handy clock-skew diagnostic), and the dark-mode toggle (shown as
+  "Dark mode: on/off").  The menu auto-closes after any action, on
+  Escape, or on a click anywhere outside it.
 * Download events as csv (`start_time,duration_sec,name`, with
-  start_time as `H:MM:SS` service time)
+  start_time as `H:MM:SS` time of day; starts at or past 24:00:00 are
+  rejected on upload — sessions cannot span midnight)
 * Upload events as csv (replacing all current)
 * Link to the display page and a QR-code popup with the display URL
   (so a phone can be pointed at the display).

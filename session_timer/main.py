@@ -6,7 +6,10 @@ implementation plan.  Run with a *single* worker (in-memory state):
     uvicorn session_timer.main:app --port 8000
 
 Set ``SESSION_TIMER_DATA_DIR`` to persist sessions across restarts via
-periodic snapshots (see ``config.py``); unset = memory-only.
+periodic snapshots (see ``config.py``); unset = memory-only.  Set
+``SESSION_TIMER_TZ`` to an IANA zone name to give sessions created
+without an explicit timezone a default (clients fall back to their own
+local clocks when nothing is resolvable).
 """
 
 from __future__ import annotations
@@ -140,7 +143,9 @@ def empty_state(name: str) -> dict:
     return {
         "name": name,
         "generation": None,
-        "anchor": None,
+        "timezone": None,
+        "utc_offset": None,
+        "server_time": time.time(),
         "font_scale": 1.0,
         "dim_level": 0.0,
         "events": [],
@@ -153,13 +158,22 @@ async def broadcast_state(name: str, session) -> dict:
     return payload
 
 
-def now_in_day(session) -> int:
-    """Current time as service-day seconds (needs the session anchor)."""
-    if session.anchor is None:
+def day_seconds_now(session) -> int:
+    """The session timezone's current wall-clock seconds of day (0..86400).
+
+    Needs the session's timezone (or the server-wide default): the
+    server resolves the zone's current UTC offset, so the client never
+    has to.  Without a resolvable zone there is no "now of day" and
+    server-side relative features ("event now", "remaining") are
+    refused — the admin sets a timezone from any browser.
+    """
+    offset = session.resolved_utc_offset()
+    if offset is None:
         raise ValueError(
-            "session has no day anchor; open the admin page first to set it"
+            "session timezone is not set (or unrecognized); set it from the "
+            "admin page's ☰ menu — 'Set timezone to this browser'"
         )
-    return int(time.time()) - session.anchor
+    return int((time.time() + offset) % (24 * 3600))
 
 
 def run_mutation(name: str, client_generation: int, mutate):
@@ -226,9 +240,9 @@ class EventNowIn(BaseModel):
     duration: int
 
 
-class AnchorIn(BaseModel):
-    anchor: int
-    force: bool = False  # admin menu "reset timezone": replace the anchor
+class TimezoneIn(BaseModel):
+    timezone: str
+    force: bool = False  # admin menu "Set timezone to this browser": replace
 
 
 class FontScaleIn(BaseModel):
@@ -263,25 +277,30 @@ async def display_page(name: str):
 # --------------------------------------------------------------- state
 
 
-@app.post("/api/{name}/anchor")
-async def set_anchor(name: str, body: AnchorIn):
-    """Set the session's service-day anchor (admin page does this on load).
+@app.post("/api/{name}/timezone")
+async def set_timezone(name: str, body: TimezoneIn):
+    """Set the session timezone, an IANA zone name (admin page does this
+    on load).
 
-    Only the admin browser knows the intended local day (the server is
-    timezone-agnostic), so it computes "local noon minus 12h" and posts
-    it here.  The first anchor wins; later calls are no-ops, but the
-    response always carries the canonical state.  With ``force`` (the
-    admin menu's "Reset timezone" action) the anchor is replaced while
-    keeping every event's day-seconds, so the HH:MM schedule is
-    unchanged but now means the re-anchored timezone's wall clock.
+    Only the admin browsers know which room's clock the schedule
+    follows (the server is timezone-agnostic apart from resolving the
+    offset), so they post ``Intl``-derived IANA names here.  The first
+    timezone wins; later calls are no-ops, but the response always
+    carries the canonical state (including the zone's current
+    ``utc_offset``).  With ``force`` (the admin menu's "Set timezone to
+    this browser" action) the timezone is replaced while keeping every
+    event's day-seconds, so the HH:MM schedule is unchanged but now
+    means the new zone's wall clock.
     """
     check_name(name)
-    if body.anchor <= 0:
-        raise HTTPException(status_code=400, detail="anchor must be a positive unixtime")
     session = store.get(name)
     if session is None:
         session = store.get_or_create(name)
-    if session.set_anchor(body.anchor, force=body.force):
+    try:
+        changed = session.set_timezone(body.timezone, force=body.force)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if changed:
         await broadcast_state(name, session)
     return session.to_dict()
 
@@ -408,7 +427,7 @@ async def event_now(
     session, _ = run_mutation(
         name,
         x_generation,
-        lambda s: s.add_event(body.name, now_in_day(s), body.duration),
+        lambda s: s.add_event(body.name, day_seconds_now(s), body.duration),
     )
     return await broadcast_state(name, session)
 
@@ -422,7 +441,7 @@ async def patch_event(
     def mutate(s):
         # "remaining" is relative to now, which is service-day seconds.
         if "remaining" in fields:
-            fields["now"] = now_in_day(s)
+            fields["now"] = day_seconds_now(s)
         return s.update_event(event_id, **fields)
 
     session, _ = run_mutation(name, x_generation, mutate)

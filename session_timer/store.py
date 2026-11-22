@@ -1,11 +1,13 @@
 """In-memory session store for the web-based session timer.
 
 See ``DESIGN.md`` for the behavioral spec and ``AGENTS.md`` for
-implementation notes.  Event times follow the GTFS "service time"
-convention: ``start_time`` is seconds since "noon minus 12 hours" of
-the session's day (local midnight, except unambiguous on DST-change
-nights); each session stores an ``anchor`` (the unixtime of its
-"noon minus 12h") so clients can convert to absolute times.
+implementation notes.  Sessions are *daily schedule templates*:
+``start_time`` is wall-clock seconds of day (0 <= start < 86400) in the
+session's timezone; the day resets at that zone's local midnight, so a
+session is equally usable every day (events cannot start past
+23:59:59).  Each session stores an IANA ``timezone`` name; the server
+resolves the zone's *current* UTC offset (``zoneinfo``) and broadcasts
+it, so clients need no timezone database of their own.
 
 The store is synchronous and is used from a single asyncio worker (one
 uvicorn process, per DESIGN.md).  Request handlers never await between
@@ -27,15 +29,55 @@ import re
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 from . import config
 
 logger = logging.getLogger(__name__)
 
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover — Python < 3.9
+    ZoneInfo = None
+
 CSV_COLUMNS = ("start_time", "duration_sec", "name")
 
 SNAPSHOT_VERSION = 1
+
+# Wall-clock start times are seconds of day; a session cannot span
+# midnight (per DESIGN.md, the daily-template tradeoff).
+MAX_DAY_SECONDS = 24 * 3600
+
+_TZ_NAME_RE = re.compile(r"^[A-Za-z0-9_+./-]{1,64}$")
+
+
+def _check_start_time(value: int, what: str = "start_time") -> int:
+    if not 0 <= value < MAX_DAY_SECONDS:
+        raise ValueError(
+            f"{what} must be a time of day between 0:00 and 23:59:59 "
+            f"(got {value}s); sessions cannot span midnight"
+        )
+    return value
+
+
+def resolve_utc_offset(tzname: str | None) -> int | None:
+    """Current UTC offset (seconds) for an IANA zone name, or None.
+
+    Falls back to ``config.DEFAULT_TZ`` when ``tzname`` is None.
+    Fail-open everywhere: an unresolvable name or a missing timezone
+    database returns None (clients then follow their own local clocks)
+    rather than breaking tz-setting on a stripped-down deployment.
+    """
+    name = tzname or config.DEFAULT_TZ
+    if not name or ZoneInfo is None:
+        return None
+    try:
+        offset = datetime.now(ZoneInfo(name)).utcoffset()
+    except Exception:
+        return None
+    return int(offset.total_seconds()) if offset is not None else None
+
 
 
 class StaleGenerationError(Exception):
@@ -106,7 +148,7 @@ class Event:
     """One timed item in a session."""
 
     name: str = ""
-    start_time: int = 0  # service-day seconds since the session's noon-12h
+    start_time: int = 0  # wall-clock seconds of day in the session timezone
     duration: int = 0  # seconds
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
@@ -136,10 +178,12 @@ class Session:
     generation: int = 0
     events: list[Event] = field(default_factory=list)
     last_used: float = field(default_factory=time.time)
-    # Unixtime of the session's "noon minus 12h" (day-second 0).  Set
-    # once by the first admin browser (only the browser knows the
-    # intended local day); None until then.
-    anchor: int | None = None
+    # IANA timezone name (e.g. "Europe/Berlin") whose wall clock the
+    # event times refer to.  Set once by the first admin browser
+    # (only the browser knows the venue); re-settable from the admin
+    # menu ("Set timezone to this browser").  None until then (the
+    # server's config.DEFAULT_TZ fills in when resolvable).
+    timezone: str | None = None
     # Countdown text-size scale chosen on a display browser (one of
     # display.js's FONT_SCALES steps).  Synced to the session so the
     # admin page's embedded preview can mirror it; presentation-only
@@ -156,11 +200,17 @@ class Session:
     def touch(self) -> None:
         self.last_used = time.time()
 
+    def resolved_utc_offset(self) -> int | None:
+        """The zone's current UTC offset (seconds), or None if unknown."""
+        return resolve_utc_offset(self.timezone)
+
     def to_dict(self) -> dict:
         return {
             "name": self.name,
             "generation": self.generation,
-            "anchor": self.anchor,
+            "timezone": self.timezone,
+            "utc_offset": self.resolved_utc_offset(),
+            "server_time": time.time(),
             "font_scale": self.display_font_scale,
             "dim_level": self.dim_level,
             "events": [event.to_dict() for event in self.events],
@@ -197,23 +247,26 @@ class Session:
         self.dim_level = level
         self.touch()
 
-    def set_anchor(self, anchor: object, *, force: bool = False) -> bool:
-        """Set the service-day anchor; returns True when it changed.
+    def set_timezone(self, tzname: object, *, force: bool = False) -> bool:
+        """Set the session timezone (IANA name); True when it changed.
 
         Only the first value wins: later calls are no-ops so a second
-        admin cannot move the day out from under a running session.
-        With ``force`` (the admin menu's explicit "reset timezone"
-        action) the anchor is replaced: event day-seconds are kept, so
-        the schedule's HH:MM numbers stay the same but now mean the
-        re-anchored timezone's wall clock (and absolute times shift by
-        the timezone difference).
+        admin cannot move the clock out from under a running session.
+        With ``force`` (the admin menu's explicit "Set timezone to this
+        browser" action) the timezone is replaced: event day-seconds
+        are kept, so the schedule's HH:MM numbers stay the same but now
+        mean the new zone's wall clock.
         """
-        anchor = _as_int(anchor, "anchor")
-        if anchor <= 0:
-            raise ValueError("anchor must be a positive unixtime")
-        if self.anchor is not None and (not force or self.anchor == anchor):
+        if not isinstance(tzname, str):
+            raise ValueError("timezone must be a string")
+        cleaned = tzname.strip()
+        if not _TZ_NAME_RE.fullmatch(cleaned):
+            raise ValueError(
+                "timezone must be an IANA zone name (e.g. Europe/Berlin)"
+            )
+        if self.timezone is not None and (not force or self.timezone == cleaned):
             return False
-        self.anchor = anchor
+        self.timezone = cleaned
         self._bump()
         return True
 
@@ -244,8 +297,9 @@ class Session:
         events therefore resolve to the most recently started one.  An
         event stays current (counting up negative) until the next event
         starts.  Before the first event starts there is no current
-        event.  ``now`` must be in the same time base as the events
-        (service-day seconds, or absolute — only comparisons matter).
+        event.  ``now`` is wall-clock seconds of day in the session's
+        timezone (0..86400); at the zone's midnight it wraps back to 0
+        and the session returns to "before the first event".
         """
         current: Event | None = None
         for event in self.events:
@@ -277,6 +331,7 @@ class Session:
         duration = _as_int(duration, "duration")
         if duration <= 0:
             raise ValueError("duration must be positive")
+        _check_start_time(start_time)
         if len(self.events) >= config.MAX_EVENTS_PER_SESSION:
             raise ValueError(
                 f"session already has the maximum of "
@@ -308,7 +363,7 @@ class Session:
         Order of application (a later argument overrides an earlier
         one), matching the admin controls in DESIGN.md:
 
-        1. ``start_time`` (service-day seconds)
+        1. ``start_time`` (wall-clock seconds of day)
         2. ``remaining``: ``start_time = now + remaining`` (``now`` is
            required and must be in the same time base)
         3. ``end_time``: ``duration = end_time - start_time``
@@ -335,6 +390,7 @@ class Session:
             new_duration = _as_int(duration, "duration")
         if new_duration <= 0:
             raise ValueError("duration must be positive")
+        _check_start_time(new_start)
 
         event.name = new_name
         event.start_time = new_start
@@ -352,23 +408,39 @@ class Session:
         DESIGN.md) the same ``delta`` is applied to the start time of
         every event that starts strictly later than the shifted event's
         original start time ("subsequent events, as found by start
-        time").
+        time").  All resulting start times must stay within one day;
+        the whole shift is rejected otherwise (naming the offending
+        event, since a cascade can push a *later* event out of range).
         """
         if field_name not in ("start_time", "duration"):
             raise ValueError("field must be 'start_time' or 'duration'")
         delta = _as_int(delta, "delta")
         event = self.find_event(event_id)
         anchor_start = event.start_time
+
         if field_name == "start_time":
-            event.start_time += delta
+            shifted: dict[str, int] = {event.id: event.start_time + delta}
         else:
             if event.duration + delta <= 0:
                 raise ValueError("duration must stay positive")
             event.duration += delta
+            shifted = {event.id: event.start_time}
         if cascade:
             for other in self.events:
                 if other.id != event.id and other.start_time > anchor_start:
-                    other.start_time += delta
+                    shifted[other.id] = other.start_time + delta
+        for other in self.events:
+            if other.id in shifted:
+                try:
+                    _check_start_time(shifted[other.id], f"'{other.name or other.id}' start_time")
+                except ValueError as exc:
+                    raise ValueError(
+                        f"shift rejected: {exc} (cascade may need to be unchecked "
+                        f"or later events shortened)"
+                    ) from exc
+        for other in self.events:
+            if other.id in shifted:
+                other.start_time = shifted[other.id]
         self._bump()
 
     def replace_events(self, items: list[dict]) -> int:
@@ -385,6 +457,14 @@ class Session:
             duration = _as_int(item.get("duration"), f"item {i}: duration")
             if duration <= 0:
                 raise ValueError(f"item {i}: duration must be positive")
+            try:
+                _check_start_time(start_time, f"item {i}: start_time")
+            except ValueError as exc:
+                # A pre-2026 export can contain >=24:00:00 times from the
+                # old anchor-based model; the range message already says
+                # the schedule cannot span midnight.  (i + 2 = file line,
+                # matching replace_from_csv's "CSV line" numbering.)
+                raise ValueError(f"CSV line {i + 2}: {exc}") from exc
             events.append(
                 Event(name=clean_name, start_time=start_time, duration=duration)
             )
@@ -529,7 +609,7 @@ class SessionStore:
             "sessions": {
                 name: {
                     "generation": session.generation,
-                    "anchor": session.anchor,
+                    "timezone": session.timezone,
                     "last_used": session.last_used,
                     "font_scale": session.display_font_scale,
                     "dim_level": session.dim_level,
@@ -598,7 +678,10 @@ class SessionStore:
             session = Session(
                 name=name,
                 generation=int(sd["generation"]),
-                anchor=sd["anchor"],
+                # snapshots predating the daily-template model stored an
+                # "anchor" (a pinned date); it is deliberately dropped —
+                # the schedule becomes a reusable daily template instead
+                timezone=sd.get("timezone"),
                 last_used=float(sd["last_used"]),
                 # snapshots predating font-scale sync lack the key
                 display_font_scale=float(sd.get("font_scale", 1.0)),

@@ -40,6 +40,10 @@
   }
 
   let events = [];
+  // The session's current UTC offset (seconds) from the server: turns
+  // server time into the session's wall-clock seconds of day (ST.dayNow).
+  // Null until the server sends it; dayNow falls back to local time.
+  let utcOffset = null;
   // In the admin preview (embed mode) the mirrored font scale comes
   // from the server state: display browsers sync their +/- choice there
   // (see applyFontSize), so the preview shows the chosen relative size.
@@ -90,9 +94,11 @@
   dimLighterBtn.addEventListener("click", () => changeDim(-1));
 
   ST.connect(name, (data) => {
-    // Raw events hold service-day seconds; convert to absolute unixtime
-    // once here so all countdown/current-event logic is unchanged.
-    events = ST.absoluteEvents(data.events, data.anchor);
+    // Raw events hold wall-clock seconds of day in the session's
+    // timezone; rendering derives "now of day" from server time +
+    // utc_offset on every tick, so no conversion is needed here.
+    events = data.events;
+    utcOffset = data.utc_offset;
     if (embed) serverFontScale = data.font_scale;
     if (typeof data.dim_level === "number") {
       dimLevel = data.dim_level;
@@ -106,7 +112,10 @@
       starts — but only FLASH_LIMIT seconds past its end: after that
       (and before anything has started) the display idles. */
   function render() {
-    const now = Date.now() / 1000;
+    // Now of day in the session's timezone: server time + utc_offset,
+    // wrapped at midnight (serverNow tracks the server clock via
+    // noteServerTime, so a wrong display clock self-corrects).
+    const now = ST.dayNow(utcOffset);
     const current = ST.currentEvent(events, now);
     const remaining =
       current === null ? null : current.start_time + current.duration - now;
