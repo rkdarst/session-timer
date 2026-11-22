@@ -32,32 +32,46 @@ services:
       - "127.0.0.1:8000:8000"
     # Container stdout logging (uvicorn access logs) — pick ONE:
     #
-    # (a) Bounded disk (recommended): json-file with rotation, so a
-    #     request flood cannot fill the host disk.  `docker logs` works.
+    # (1) True memory-only: log to the host journald configured with
+    #     Storage=volatile, i.e. put this into /etc/systemd/journald.conf
+    #     on the HOST (then `systemctl restart systemd-journald`):
+    #
+    #         [Journal]
+    #         Storage=volatile
+    #         SystemMaxUse=64M
+    #
+    #     The journal then lives only on the tmpfs /run (RAM, wiped on
+    #     reboot) under the SystemMaxUse cap; logs stay readable via
+    #     `journalctl` and `docker logs`.  NOTE: this is a HOST-wide
+    #     setting — it affects ALL journald logging on the machine, not
+    #     just this container.
+    # logging:
+    #   driver: journald
+    #
+    # (2) Bounded disk (recommended if journald-volatile is not wanted):
+    #     json-file with rotation, so a request flood cannot fill the
+    #     host disk.  `docker logs` works.  Sample max-size below; adjust
+    #     to taste (e.g. "1m" with max-file "3" for a ~3 MB ceiling).
     # logging:
     #   driver: json-file
     #   options:
     #     max-size: "10m"
     #     max-file: "3"
     #
-    # (b) True memory-only: log to the host journald configured with
-    #     Storage=volatile in /etc/systemd/journald.conf (the journal
-    #     then lives on the tmpfs /run, capped by SystemMaxUse=...).
-    #     Logs stay readable via `journalctl`; this is a HOST-wide
-    #     setting (affects all journald logging on the machine).
-    # logging:
-    #   driver: journald
-    #
-    # (c) Discard entirely: zero I/O of any kind, but `docker logs`
+    # (3) Discard entirely: zero I/O of any kind, but `docker logs`
     #     shows nothing and a crash leaves only the exit code and the
     #     HEALTHCHECK status (snapshot-write errors become invisible).
     # logging:
     #   driver: none
     #
-    # Alternative to any of the above: drop access logs at the source
-    # by overriding the command, keeping only lifecycle/error lines
-    # (a few lines per boot regardless of request volume):
+    # BONUS (combines with any of the above): drop access logs at the
+    # source by overriding the command, keeping only lifecycle/error
+    # lines (a few lines per boot regardless of request volume):
     # command: uvicorn session_timer.main:app --host 0.0.0.0 --port 8000 --no-access-log
+    #
+    # NOTE: the logging driver is fixed at container creation time —
+    # switching requires `docker compose up -d --force-recreate`.
+
     # No volumes on purpose (memory-only state).
     #
     # OPTIONAL: persist sessions across restarts by uncommenting these
