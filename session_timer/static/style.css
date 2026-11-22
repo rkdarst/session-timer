@@ -1,0 +1,342 @@
+/* session-timer shared styles */
+
+:root {
+  --bar-height: 20vh; /* progress bar takes the bottom 20% (DESIGN.md) */
+  --next-height: 10vh; /* "next speaker" bar: next 10% up (20-30% from bottom) */
+  --green: #2ecc40;
+  --yellow: #ffdc00;
+  --red: #ff4136;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* ---------------------------------------------------- display page */
+
+body.display {
+  background: #000;
+  color: #fff;
+}
+
+/* Idle state (before the first event starts, or 5 min after the last
+   one ended): greyed-out 00:00 instead of a fully blank screen, so the
+   countdown text size can be judged in advance. */
+#timer.idle {
+  color: #555;
+}
+
+#timer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--bar-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Exact size is set inline by JS on every tick (step * base, capped
+     by measured text to exactly fill the screen with zero border);
+     this is the pre-JS default. */
+  font-size: min(28vw, 40vh);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+#timer.green { color: var(--green); }
+#timer.yellow { color: var(--yellow); }
+#timer.red { color: var(--red); }
+
+#bar-wrap {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--bar-height);
+  background: #111;
+}
+
+#bar {
+  height: 100%;
+  width: 0;
+  transition: width 0.25s linear;
+}
+
+#bar.green { background: var(--green); }
+#bar.yellow { background: var(--yellow); }
+#bar.red { background: var(--red); }
+
+/* "Next speaker" bar: while the current event has expired and a future
+   event exists, a white bar fills across the 10%-tall band sitting on
+   top of the progress bar (20-30% up from the bottom), reaching full
+   width exactly when the next event starts.  Short gaps fill from
+   expiry; gaps longer than 10 minutes only fill during the final 10
+   minutes before the next event (see display.js NEXT_WINDOW). */
+#next-wrap {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--bar-height);
+  height: var(--next-height);
+  background: #1a1a1a;
+}
+
+#next-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  background: #fff;
+  transition: width 0.25s linear;
+}
+
+/* White text that stays readable over both the dark track and the
+   white fill (difference blend inverts it over the white bar). */
+#next-text {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  mix-blend-mode: difference;
+  font-size: min(5vw, 7vh);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Display controls (upper-right corner): countdown text size +/- and
+   fullscreen toggle.  Subtle by default so they do not distract on a
+   projected display; opaque on hover/keyboard focus. */
+#display-controls {
+  position: fixed;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 10;
+  display: flex;
+  gap: 0.25rem;
+  opacity: 0.35;
+}
+
+#display-controls:hover,
+#display-controls:focus-within {
+  opacity: 1;
+}
+
+#display-controls button {
+  padding: 0.2rem 0.6rem;
+  font-size: 1.2rem;
+  line-height: 1;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#display-controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* The hidden attribute must beat the fixed flex layout above (used by
+   the admin page's embedded preview, which hides the controls). */
+#display-controls[hidden] {
+  display: none;
+}
+
+/* 0.5 Hz flash after expiry (DESIGN.md): on/off every 1 s */
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.expired {
+  animation: blink 2s steps(1) infinite;
+}
+
+/* ---------------------------------------------------- admin page */
+
+body.admin {
+  padding: 1rem;
+}
+
+#stale-banner,
+#error-banner {
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+  color: #fff;
+  border-radius: 4px;
+}
+
+#stale-banner {
+  position: sticky;
+  top: 0;
+  background: var(--red);
+}
+
+#stale-banner button {
+  margin-left: 0.5rem;
+}
+
+#error-banner {
+  background: #ff851b;
+}
+
+.toolbar {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  padding: 0.25rem 0.4rem;
+  border-bottom: 1px solid #ddd;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* Overlapping events are highlighted, not blocked (DESIGN.md) */
+tr.overlap td {
+  background: #fff3cd;
+}
+
+td input {
+  width: 100%;
+  min-width: 5rem;
+}
+
+input[data-field="start_time"] {
+  min-width: 11rem;
+}
+
+/* The row the display page is currently showing (same current-event
+   rule as the display; its Remaining cell is the only one filled in) */
+tr.current td {
+  background: #d4f7d4;
+}
+
+tr.current td.remaining {
+  font-weight: bold;
+}
+
+td.remaining.past {
+  color: var(--red);
+  font-weight: bold;
+}
+
+.step-buttons button {
+  min-width: 2rem;
+}
+
+/* Display-page link in the toolbar, styled like a button */
+/* Tiny always-on live preview in the admin toolbar: an iframe of the
+   real display page (?embed=1).  The display layout is proportional to
+   its viewport, so even at this strip size it shows exactly what the
+   projector shows (color state, idle/expired, next-speaker bar, and
+   the font scale a display browser last chose). */
+#preview-frame {
+  width: 9rem;
+  height: 1.75rem;
+  border: 1px solid #767676;
+  border-radius: 4px;
+  background: #000;
+}
+
+/* Toolbar buttons and the display-page link share the same look and
+   size (native button fonts would otherwise be smaller than the link) */
+.toolbar button,
+#display-link {
+  font-size: 0.875rem;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid #767676;
+  border-radius: 4px;
+  background: #f0f0f0;
+  color: #000;
+}
+
+.toolbar button:hover,
+#display-link:hover {
+  background: #e2e2e2;
+}
+
+#display-link {
+  display: inline-block;
+  text-decoration: none;
+}
+
+/* QR code popup */
+#qr-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+/* The hidden attribute must win over the flex layout above */
+#qr-modal[hidden] {
+  display: none;
+}
+
+.qr-box {
+  background: #fff;
+  color: #000;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  text-align: center;
+  max-width: min(90vw, 30rem);
+}
+
+.qr-box h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem;
+}
+
+#qr-code {
+  width: min(70vw, 16rem);
+  margin: 0 auto;
+  padding: 0.5rem;
+  background: #fff;
+}
+
+#qr-code svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+#qr-url {
+  word-break: break-all;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 50rem) {
+  body.admin {
+    padding: 0.5rem;
+  }
+
+  table {
+    font-size: 0.85rem;
+  }
+
+  input[type="datetime-local"] {
+    min-width: 8rem;
+  }
+}

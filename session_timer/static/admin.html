@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<title>Session timer admin</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="admin">
+<div id="stale-banner" hidden>
+  State changed by someone else &mdash; your view is outdated.
+  <button onclick="location.reload()">Refresh</button>
+</div>
+<div id="error-banner" hidden></div>
+
+<div class="toolbar">
+  <button id="add-event">Add event</button>
+  <button id="event-now">Event now</button>
+  <label>
+    <input type="checkbox" id="cascade" checked>
+    +/- delays later events
+  </label>
+  <iframe id="preview-frame" title="Live preview of the display page"></iframe>
+  <span style="flex: 1"></span>
+  <a id="display-link" href="" target="_blank" rel="noopener" title="Open the read-only display page in a new tab">Display page</a>
+  <button id="show-qr" title="Show a QR code linking to the display page">QR code</button>
+  <button id="download-csv">Download CSV</button>
+  <button id="upload-csv-btn">Upload CSV</button>
+  <input type="file" id="upload-csv" accept=".csv,text/csv" hidden>
+</div>
+
+<table id="events-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Start</th>
+      <th></th>
+      <th>Duration (s)</th>
+      <th></th>
+      <th>End</th>
+      <th title="Countdown for the event currently shown on the display page (blank for all other events)">Remaining</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<div id="qr-modal" hidden>
+  <div class="qr-box">
+    <h2>Scan to open the display page</h2>
+    <div id="qr-code"></div>
+    <p><a id="qr-url" href="" target="_blank" rel="noopener"></a></p>
+    <button id="qr-close">Close</button>
+  </div>
+</div>
+
+<script src="/static/common.js"></script>
+<script src="/static/qrcode.js"></script>
+<script src="/static/admin.js"></script>
+</body>
+</html>

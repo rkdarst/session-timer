@@ -1,0 +1,43 @@
+# session-timer — docker-compose deployment TEMPLATE.
+#
+# This file is NOT used from within the repository.  Copy it to the
+# machine where the app is deployed and edit it there (image name, port,
+# etc.).  Build and push the image first (see Dockerfile in the repo):
+#
+#   docker build -t REGISTRY/example/session-timer:TAG /path/to/session-timer
+#   docker push REGISTRY/example/session-timer:TAG
+#
+# Deployment notes (all by design, see DESIGN.md):
+# - State is memory-only by default: no volumes, no database.
+#   Restarting the container loses every session; that is by design.
+#   (Optional snapshots: see the commented lines below.)
+# - Run exactly ONE replica of this service.  Containers do not share
+#   state, so `--scale` or a second host behind the same DNS name would
+#   hand users unrelated (empty) sessions.
+# - The app serves plain HTTP on 8000; TLS termination belongs in a
+#   reverse proxy in front of it.
+
+services:
+  session-timer:
+    # CHANGE ME: registry/path/tag the image was pushed to — or replace
+    # `image:` with `build:` pointing at a checkout on this host:
+    #   build: /srv/session-timer
+    image: ghcr.io/example/session-timer:latest
+    container_name: session-timer
+    restart: unless-stopped
+    # Bind to the host loopback only: a reverse proxy listens publicly
+    # (443) and forwards here.  Change to "8000:8000" to expose the
+    # container directly.
+    ports:
+      - "127.0.0.1:8000:8000"
+    # No volumes on purpose (memory-only state).
+    #
+    # OPTIONAL: persist sessions across restarts by uncommenting these
+    # lines (the app then writes a snapshot into the volume every 5
+    # minutes and on graceful shutdown; a hard kill can lose the last
+    # few minutes of edits):
+    #
+    # environment:
+    #   - SESSION_TIMER_DATA_DIR=/data
+    # volumes:
+    #   - ./session-timer-data:/data
