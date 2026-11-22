@@ -29,7 +29,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -134,11 +134,15 @@ async def security_headers(request: Request, call_next):
     """Basic hardening headers on every HTTP response.
 
     Deliberately NO X-Frame-Options / CSP frame-ancestors: the display
-    page is meant to be embedded in arbitrary pages.
+    page is meant to be embedded in arbitrary pages.  Also drops the
+    Server header uvicorn would otherwise add ("Server: uvicorn" is a
+    fingerprint on a site that is supposed to reveal nothing).
     """
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "no-referrer")
+    if "server" in response.headers:
+        del response.headers["server"]
     return response
 
 
@@ -317,6 +321,17 @@ class DimIn(BaseModel):
 async def persistence_info():
     """Whether snapshot persistence is enabled (drives the admin warning)."""
     return {"persisted": bool(config.DATA_DIR)}
+
+
+@app.get("/", include_in_schema=False)
+async def root():
+    """Empty 404: the root path gives no clue anything is hosted here.
+
+    Same for every other unmatched path (the catch-all at the end of the
+    route table).  FastAPI's default is a JSON body naming the framework,
+    exactly the fingerprint the URL-secrecy model does not want to leak.
+    """
+    return Response(status_code=404)
 
 
 @app.get("/{name}/", include_in_schema=False)
@@ -582,6 +597,21 @@ async def put_events_csv(
     return await broadcast_state(name, session)
 
 
+# ------------------------------------------ catch-all: stay fingerprint-free
+# Registered LAST, so every real route matches first.  Unknown paths (and
+# unknown methods on known paths) get the same empty 404 as "/": no JSON
+# framework signature, no route listing, nothing.
+
+
+@app.api_route(
+    "/{rest:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    include_in_schema=False,
+)
+async def catch_all(rest: str):
+    return Response(status_code=404)
+
+
 # --------------------------------------------------------------- entry point
 
 
@@ -589,10 +619,16 @@ def run() -> None:
     """Entry point for the `session-timer` console script (pyproject).
 
     Single worker on purpose: all state is in this process' memory.
+    --no-server-header: the site should not advertise what it runs
+    (URL-secrecy model; see the root handler's empty 404s).
     """
     import uvicorn
 
     uvicorn.run(
-        "session_timer.main:app", host=config.HOST, port=config.PORT, workers=1
+        "session_timer.main:app",
+        host=config.HOST,
+        port=config.PORT,
+        workers=1,
+        server_header=False,
     )
 

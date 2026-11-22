@@ -66,8 +66,9 @@ services:
     #
     # BONUS (combines with any of the above): drop access logs at the
     # source by overriding the command, keeping only lifecycle/error
-    # lines (a few lines per boot regardless of request volume):
-    # command: uvicorn session_timer.main:app --host 0.0.0.0 --port 8000 --no-access-log
+    # lines (a few lines per boot regardless of request volume).  Keep
+    # --no-server-header: it hides the "Server: uvicorn" fingerprint.
+    # command: uvicorn session_timer.main:app --host 0.0.0.0 --port 8000 --no-access-log --no-server-header
     #
     # NOTE: the logging driver is fixed at container creation time —
     # switching requires `docker compose up -d --force-recreate`.

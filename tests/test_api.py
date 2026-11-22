@@ -349,6 +349,7 @@ def test_pages_served(client):
         (f"/{NAME}/", "show-help"),
         (f"/{NAME}/", "menu-btn"),
         (f"/{NAME}/", "set-timezone"),
+        (f"/{NAME}/", ">Speaker view</a>"),  # toolbar link (was menu item)
         (f"/{NAME}/", "config.js"),
         (f"/{NAME}/display", 'id="timer"'),
         (f"/{NAME}/display", "config.js"),
@@ -568,6 +569,22 @@ def test_security_headers_added_but_no_frame_restrictions(client):
     assert r.headers["x-content-type-options"] == "nosniff"
     assert r.headers["referrer-policy"] == "no-referrer"
     assert "x-frame-options" not in r.headers
+    # No framework fingerprint: uvicorn's Server header is stripped.
+    assert "server" not in r.headers
+
+
+def test_root_and_unknown_paths_are_empty_404s(client):
+    """/ and every unmatched path answer with an empty 404: no JSON
+    framework signature, nothing that hints at what is hosted here.
+    Security is URL secrecy — probing the site must reveal nothing."""
+    for path in ("/", "/no-such-page", "/x/y/z", "/favicon.ico"):
+        r = client.get(path)
+        assert r.status_code == 404, path
+        assert r.content == b"", path
+    # Unknown methods on known paths are equally clueless.
+    r = client.delete("/")
+    assert r.status_code == 404
+    assert r.content == b""
 
 
 def test_hub_broadcast_keeps_only_newest_for_slow_consumer():

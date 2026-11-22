@@ -364,7 +364,7 @@
 
   setInterval(updateRemaining, 1000);
 
-  // ------------------------------------------- display link + QR popup
+  // ------------------------------------------- speaker-view link + QR popup
 
   function displayUrl() {
     return window.location.origin + "/" + encodeURIComponent(name) + "/display";
@@ -462,8 +462,9 @@
 
   // ------------------------------------------------ hamburger menu
 
-  // Overflow actions (display page, QR, CSV, dark mode).  Auto-closes
-  // after any action, on Escape, or on a click anywhere outside it.
+  // Overflow actions (QR, CSV, timezone re-set, raw state, dark mode).
+  // Auto-closes after any action, on Escape, or on a click anywhere
+  // outside it.
   const menuBtn = document.getElementById("menu-btn");
   const menu = document.getElementById("menu");
   const dropdown = menuBtn.parentElement;

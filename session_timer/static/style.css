@@ -301,7 +301,8 @@ td.gap.negative {
   min-width: 2rem;
 }
 
-/* Display-page link in the toolbar, styled like a button */
+/* Speaker-view link in the toolbar, styled like a button (it sits among
+   the toolbar buttons; the shared look below must cover anchors too) */
 /* Tiny always-on live preview in the admin toolbar: an iframe of the
    real display page (?embed=1).  The display layout is proportional to
    its viewport, so even at this strip size it shows exactly what the
@@ -316,9 +317,10 @@ td.gap.negative {
   margin: -1em 0em -1em 0em;
 }
 
-/* Toolbar buttons and the display-page link share the same look and
+/* Toolbar buttons and the speaker-view link share the same look and
    size (native button fonts would otherwise be smaller than the link) */
-.toolbar button {
+.toolbar button,
+#display-link {
   font-size: 0.875rem;
   padding: 0.25rem 0.75rem;
   border: 1px solid var(--btn-border);
@@ -327,11 +329,13 @@ td.gap.negative {
   color: var(--btn-fg);
 }
 
-.toolbar button:hover {
+.toolbar button:hover,
+#display-link:hover {
   background: var(--btn-hover);
 }
 
-/* Hamburger menu: overflow actions (display link, QR, CSV, dark mode) */
+/* Hamburger menu: overflow actions (QR, CSV, timezone re-set, raw state,
+   dark mode); the Speaker-view link lives in the toolbar itself */
 .dropdown {
   position: relative;
 }
@@ -380,6 +384,8 @@ td.gap.negative {
 #display-link {
   display: inline-block;
   text-decoration: none;
+  white-space: nowrap;
+  line-height: 1.4; /* match the toolbar buttons' box */
 }
 
 /* QR code and help popups */

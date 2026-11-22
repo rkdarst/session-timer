@@ -45,5 +45,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
 
 # Single worker on purpose (see header comment).  TLS is expected to be
 # terminated by a reverse proxy in front of the container.
-CMD ["uvicorn", "session_timer.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --no-server-header: do not advertise "Server: uvicorn" to probers
+# (URL-secrecy model; see the root handler's empty 404s in main.py).
+CMD ["uvicorn", "session_timer.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]
 
