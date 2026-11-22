@@ -13,7 +13,11 @@ dependencies = [
     "uvicorn[standard]",
 ]
 
-[project.optional-dependencies]
+# Dev-only tools as a PEP 735 dependency group (not an extra): uv
+# installs the default groups (incl. dev) on plain `uv sync`, so CI's
+# `uv sync --frozen` gets pytest, and the Docker image excludes it with
+# its existing `--no-dev` flags.
+[dependency-groups]
 dev = [
     "pytest",
     "httpx",

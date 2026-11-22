@@ -294,6 +294,18 @@ const ST = (() => {
     return (((serverNow() + offset) % 86400) + 86400) % 86400;
   }
 
+  /**
+   * Tab title: "<NAME> — Session timer" (+" admin" for the admin page),
+   * so browser tabs tell sessions apart.  Client-side because the pages
+   * are static files; leaves the HTML's static title in place for
+   * invalid/missing session names.
+   */
+  function setPageTitle(name, kind) {
+    if (!validName(name)) return;
+    document.title =
+      name + " — Session timer" + (kind ? " " + kind : "");
+  }
+
   return {
     sessionName,
     validName,
@@ -307,5 +319,6 @@ const ST = (() => {
     noteServerTime,
     serverNow,
     dayNow,
+    setPageTitle,
   };
 })();

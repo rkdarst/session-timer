@@ -22,6 +22,7 @@
     errorBanner.hidden = false;
     return;
   }
+  ST.setPageTitle(name, "admin");
 
   ST.connect(name, onState);
 

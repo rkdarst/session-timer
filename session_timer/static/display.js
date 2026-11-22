@@ -38,6 +38,7 @@
     timerEl.textContent = "Invalid session URL";
     return;
   }
+  ST.setPageTitle(name);
 
   let events = [];
   // The session's current UTC offset (seconds) from the server: turns
