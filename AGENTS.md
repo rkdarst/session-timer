@@ -266,6 +266,15 @@ Clients send their known `generation` in the request (header
   idle-only eviction).  Commented lines are in the compose template.
 - The `[project.scripts]` entry `session-timer = session_timer.main:run`
   starts the same single-worker uvicorn locally on 127.0.0.1:8000.
+- GitHub Actions (`.github/workflows/build-image.yml`): on every push /
+  PR / manual dispatch it runs pytest (uv, same `uv.lock` as the image),
+  builds the image tagged `session-timer:latest` (buildx, GHA cache) and
+  smoke-tests the container against a static asset.  On push events it
+  then publishes to `ghcr.io/rkdarst/session-timer:latest` with the
+  workflow's own GITHUB_TOKEN (`packages: write`; the first push creates
+  the package, private by default — flip to public in package settings
+  for anonymous pulls).  No registry credentials are configured
+  anywhere.
 
 ## Testing / validation
 
