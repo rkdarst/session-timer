@@ -1,11 +1,26 @@
 # session-timer — docker-compose deployment TEMPLATE.
 #
 # This file is NOT used from within the repository.  Copy it to the
-# machine where the app is deployed and edit it there (image name, port,
-# etc.).  Build and push the image first (see Dockerfile in the repo):
+# machine where the app is deployed and edit it there (port, logging,
+# etc.).
 #
-#   docker build -t REGISTRY/example/session-timer:TAG /path/to/session-timer
-#   docker push REGISTRY/example/session-timer:TAG
+# The image is built and published automatically by GitHub Actions on
+# every push to master (see .github/workflows/build-image.yml):
+#
+#   ghcr.io/rkdarst/session-timer:latest
+#
+# To deploy, just pull it (see image: below):
+#
+#   docker compose pull
+#   docker compose up -d
+#
+# NOTE: the package is PRIVATE on ghcr.io until flipped to public in
+# its package settings, so an anonymous `docker pull` fails with
+# "denied" — either `docker login ghcr.io` first, or make the package
+# public.  To run an image built by hand instead, replace `image:` with
+# `build:` pointing at a checkout on this host:
+#
+#   build: /srv/session-timer
 #
 # Deployment notes (all by design, see DESIGN.md):
 # - State is memory-only by default: no volumes, no database.
@@ -19,10 +34,10 @@
 
 services:
   session-timer:
-    # CHANGE ME: registry/path/tag the image was pushed to — or replace
-    # `image:` with `build:` pointing at a checkout on this host:
-    #   build: /srv/session-timer
-    image: ghcr.io/example/session-timer:latest
+    # Published by the repo's GitHub Actions workflow on every push to
+    # master.  CHANGE ME if you forked (your ghcr path) or want to pin
+    # a digest instead of the moving :latest tag.
+    image: ghcr.io/rkdarst/session-timer:latest
     container_name: session-timer
     restart: unless-stopped
     # Bind to the host loopback only: a reverse proxy listens publicly
