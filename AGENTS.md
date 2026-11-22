@@ -33,6 +33,20 @@ Phases 1–4 are implemented and verified:
   and a Help button opens a concise popup
 - Verified live with uvicorn: pages 200, 409 on stale generation, CSV
   round-trip, WebSocket initial state + push + ping/pong
+- Audit fixes (post-timezone-redesign): mutations validate the
+  session name (junk names can no longer squat in the session cap); the
+  timezone route maps a full store to 503 like every other creation
+  path (was an unhandled 500); CSV uploads are capped at 1 MB (413);
+  CSV export neutralizes spreadsheet formula prefixes (leading =, +,
+  -, @, tab, CR get a single-quote prefix on export only); durations
+  are capped at 24 h (config.MAX_DURATION_SECONDS, checked in
+  add/update/shift/replace); duration shifts validate before mutating
+  (true all-or-nothing cascades); Hub push queues are capped (16) and a
+  slow consumer keeps only the newest snapshot; every response carries
+  X-Content-Type-Options: nosniff + Referrer-Policy: no-referrer, with
+  framing deliberately unrestricted (display page is embeddable); the
+  compose template documents Docker log rotation so a request flood
+  cannot fill the host disk.  Tests: 96 passing.
 - Times are **wall-clock times of day** in the session timezone
   (seconds of day in `[0, 86400)`; sessions are reusable daily
   templates that reset at the zone's midnight): admin start column

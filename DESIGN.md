@@ -111,7 +111,18 @@ at most 128 events (larger adds/CSV uploads are rejected); at most 1024
 sessions are kept — when the cap is hit, an immediate expiry pass runs,
 then only sessions idle for over an hour are evicted oldest-first, and
 if nothing qualifies, new sessions are refused with 503 (a live session
-is never evicted).
+is never evicted).  Durations are at most 24 hours; CSV uploads are
+capped at 1 MB (rejected with 413).
+
+Hardening: every response carries X-Content-Type-Options: nosniff
+and Referrer-Policy: no-referrer; framing is deliberately *not*
+restricted so the display page can be embedded anywhere.  CSV export
+prefixes a ' to names beginning with =, +, -, @ (or tab/CR) so
+spreadsheets do not treat them as formulas (re-uploading an export
+keeps the quote).  Mutations validate the session name, so junk names
+cannot occupy the session cap; WebSocket push queues are capped -- a
+stalled client is fed only the newest state (each payload is a full
+snapshot).
 
 
 Design with simplicity and security in mind.

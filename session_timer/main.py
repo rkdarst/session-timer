@@ -104,14 +104,32 @@ app = FastAPI(title="session-timer", lifespan=lifespan, docs_url=None, redoc_url
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Basic hardening headers on every HTTP response.
+
+    Deliberately NO X-Frame-Options / CSP frame-ancestors: the display
+    page is meant to be embedded in arbitrary pages.
+    """
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    return response
+
+
 class Hub:
     """Per-session fan-out of state payloads to connected WebSocket clients."""
+
+    # Per-subscriber cap: each queued item is a complete state snapshot,
+    # so a stalled client that stops reading is dropped back to just the
+    # newest payload instead of accumulating memory without bound.
+    QUEUE_MAX = 16
 
     def __init__(self) -> None:
         self._queues: dict[str, set[asyncio.Queue]] = {}
 
     def subscribe(self, name: str) -> asyncio.Queue:
-        queue: asyncio.Queue = asyncio.Queue()
+        queue: asyncio.Queue = asyncio.Queue(maxsize=self.QUEUE_MAX)
         self._queues.setdefault(name, set()).add(queue)
         return queue
 
@@ -124,7 +142,17 @@ class Hub:
 
     async def broadcast(self, name: str, payload: dict) -> None:
         for queue in list(self._queues.get(name, ())):
-            queue.put_nowait(payload)
+            try:
+                queue.put_nowait(payload)
+            except asyncio.QueueFull:
+                # Slow consumer: drop every queued (superseded) snapshot
+                # and keep only this newest one.
+                while True:
+                    try:
+                        queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                queue.put_nowait(payload)
 
 
 hub = Hub()
@@ -184,7 +212,11 @@ def run_mutation(name: str, client_generation: int, mutate):
     refresh.  A *stale* request must not create the session: only a
     correctly-generational mutation does (a nonexistent session has
     generation 0, so the first-ever mutation sends 0).
+
+    The session name is validated here too, so mutations cannot create
+    junk-named sessions that no page URL could ever reach.
     """
+    check_name(name)
     # Session-cap check first: a full store must surface as 503, not
     # as a misleading 409 (the request is not stale — it is refused).
     if store.get(name) is None and len(store.sessions) >= config.MAX_SESSIONS:
@@ -295,7 +327,12 @@ async def set_timezone(name: str, body: TimezoneIn):
     check_name(name)
     session = store.get(name)
     if session is None:
-        session = store.get_or_create(name)
+        try:
+            session = store.get_or_create(name)
+        except SessionLimitError as exc:
+            # Same mapping as run_mutation: a full store is 503, not a
+            # misleading 409 or an unhandled 500.
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
     try:
         changed = session.set_timezone(body.timezone, force=body.force)
     except ValueError as exc:
@@ -490,7 +527,16 @@ async def get_events_csv(name: str):
 async def put_events_csv(
     name: str, request: Request, x_generation: Annotated[int, Header()]
 ):
-    text = (await request.body()).decode("utf-8", errors="replace")
+    limit = config.MAX_CSV_UPLOAD_BYTES
+    detail = f"CSV upload too large (limit {limit} bytes)"
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > limit:
+        raise HTTPException(status_code=413, detail=detail)
+    raw = await request.body()
+    if len(raw) > limit:
+        # Chunked requests without Content-Length are bounded only here.
+        raise HTTPException(status_code=413, detail=detail)
+    text = raw.decode("utf-8", errors="replace")
     # Upload *replaces* all events (per DESIGN.md).
     session, _ = run_mutation(name, x_generation, lambda s: s.replace_from_csv(text))
     return await broadcast_state(name, session)

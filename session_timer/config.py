@@ -18,6 +18,13 @@ NAME_RE = re.compile(rf"^[A-Za-z0-9_-]{{1,{NAME_MAX_LENGTH}}}$")
 # ------------------------------------------------------------- events
 EVENT_NAME_MAX_LENGTH = 128
 MAX_EVENTS_PER_SESSION = 128
+# Durations cap at one day: a daily template has no longer events, and
+# an unbounded value would render garbage client-side (JS number
+# precision) and allow nonsense schedules.
+MAX_DURATION_SECONDS = 24 * 3600
+# PUT /api/{name}/events.csv body cap: 128 events x ~200 bytes is a few
+# KB; 1 MB leaves generous headroom while bounding request memory.
+MAX_CSV_UPLOAD_BYTES = 1_000_000
 
 # ----------------------------------------------------------- sessions
 MAX_SESSIONS = 1024

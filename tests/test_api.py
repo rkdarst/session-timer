@@ -5,7 +5,10 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from session_timer.main import app, store
+import asyncio
+
+from session_timer.main import Hub, app, store
+from session_timer.store import Session
 
 NAME = "apitest"  # unique per run; module-level store is in-memory
 
@@ -475,3 +478,109 @@ def test_dim_level_syncs_without_generation_change(client):
 def test_dim_never_creates_session(client):
     assert client.put("/api/nobody-home/dim", json={"level": 0.3}).status_code == 404
     assert store.get("nobody-home") is None
+
+
+# ------------------------------------------------- hardening regressions
+
+
+def test_mutation_with_invalid_session_name_is_404_and_creates_nothing(client):
+    """Mutations validate the session name: junk names that no page URL
+    could ever reach must not squat in the session cap."""
+    r = client.post(
+        "/api/bad%20name%20%C3%A9/events",
+        json={"name": "x", "start_time": 0, "duration": 60},
+        headers=gen(0),
+    )
+    assert r.status_code == 404
+    assert "bad name é" not in store.sessions
+
+
+def test_timezone_creation_at_session_cap_is_503(client):
+    """The timezone route creates sessions (admin page stamps on load);
+    a full store must surface as 503 like every other creation path,
+    not as an unhandled 500."""
+    for i in range(1024 - len(store.sessions)):
+        store.sessions[f"filler{i:04d}"] = Session(name=f"filler{i:04d}")
+    try:
+        r = client.post("/api/capfull/timezone", json={"timezone": "UTC"})
+        assert r.status_code == 503
+        assert "capfull" not in store.sessions
+    finally:
+        for n in [n for n in store.sessions if n.startswith("filler")]:
+            del store.sessions[n]
+
+
+def test_csv_upload_size_cap(client):
+    add_event(client, 0, "keep", 0, 60)
+    big = "0:00,60,x\n" * 120_000  # ~1.1 MB, over the 1 MB limit
+    r = client.put(
+        f"/api/{NAME}/events.csv",
+        content=big,
+        headers={**gen(1), "Content-Type": "text/csv"},
+    )
+    assert r.status_code == 413
+    state = client.get(f"/api/{NAME}/state").json()
+    assert [e["name"] for e in state["events"]] == ["keep"]
+
+
+def test_csv_upload_duration_upper_bound_rejected(client):
+    r = client.put(
+        f"/api/{NAME}/events.csv",
+        content="0:00,99999999,x\n",
+        headers={**gen(0), "Content-Type": "text/csv"},
+    )
+    assert r.status_code == 400
+    assert "24 hours" in r.json()["detail"]
+
+
+def test_csv_export_neutralizes_formula_prefixes(client):
+    """A name starting with '=' would execute as a spreadsheet formula
+    on import; the export prefixes a single quote (OWASP mitigation)."""
+    add_event(client, 0, '=HYPERLINK("http://evil", "x")', 0, 60)
+    add_event(client, 1, "plain name", 300, 60)
+    r = client.get(f"/api/{NAME}/events.csv")
+    assert r.status_code == 200
+    body = r.text
+    assert "'=HYPERLINK" in body
+    # no un-prefixed formula cell remains
+    assert '"=HYPERLINK' not in body
+    assert ",plain name" in body
+
+
+def test_duration_upper_bound_via_api(client):
+    r = add_event(client, 0, "too long", 0, 86401)
+    assert r.status_code == 400
+    # boundary: exactly 24 h is fine
+    r = add_event(client, 0, "all day", 0, 86400)
+    assert r.status_code == 200
+    # patch path (end/remaining conversions funnel through the check)
+    eid = client.get(f"/api/{NAME}/state").json()["events"][0]["id"]
+    r = client.patch(
+        f"/api/{NAME}/events/{eid}", json={"duration": 10**20}, headers=gen(1)
+    )
+    assert r.status_code == 400
+
+
+def test_security_headers_added_but_no_frame_restrictions(client):
+    """Hardening headers on every response; framing stays unrestricted
+    because the display page is meant to be embedded anywhere."""
+    r = client.get("/static/style.css")
+    assert r.headers["x-content-type-options"] == "nosniff"
+    assert r.headers["referrer-policy"] == "no-referrer"
+    assert "x-frame-options" not in r.headers
+
+
+def test_hub_broadcast_keeps_only_newest_for_slow_consumer():
+    hub = Hub()
+    q = hub.subscribe("hubtest")
+
+    async def flood():
+        for i in range(50):
+            await hub.broadcast("hubtest", {"i": i})
+
+    asyncio.run(flood())
+    # Bounded: never grows past the cap, and the newest snapshot is kept.
+    assert q.qsize() < Hub.QUEUE_MAX
+    items = [q.get_nowait() for _ in range(q.qsize())]
+    assert items[-1] == {"i": 49}
+    hub.unsubscribe("hubtest", q)

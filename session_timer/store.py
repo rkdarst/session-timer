@@ -61,6 +61,35 @@ def _check_start_time(value: int, what: str = "start_time") -> int:
     return value
 
 
+def _check_duration(value: int, what: str = "duration") -> int:
+    """Durations are positive and at most one day (config.MAX_DURATION_SECONDS):
+    a daily template has no longer events, and an unbounded value would
+    render garbage client-side (JS number precision) and allow nonsense
+    schedules."""
+    if not 0 < value <= config.MAX_DURATION_SECONDS:
+        raise ValueError(
+            f"{what} must be between 1 second and 24 hours (got {value}s)"
+        )
+    return value
+
+
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_formula_safe(name: str) -> str:
+    """Neutralize spreadsheet formula injection on CSV export.
+
+    A name starting with '=', '+', '-', '@', tab or CR may be executed
+    as a formula when the file is opened in Excel/LibreOffice; the
+    standard mitigation is to prefix a single quote so it imports as
+    literal text.  Applied on export only (stored names are unchanged;
+    re-uploading an exported file therefore keeps the quote).
+    """
+    if name.startswith(_CSV_FORMULA_PREFIXES):
+        return "'" + name
+    return name
+
+
 def resolve_utc_offset(tzname: str | None) -> int | None:
     """Current UTC offset (seconds) for an IANA zone name, or None.
 
@@ -329,8 +358,7 @@ class Session:
         clean_name = _check_name(name)
         start_time = _as_int(start_time, "start_time")
         duration = _as_int(duration, "duration")
-        if duration <= 0:
-            raise ValueError("duration must be positive")
+        _check_duration(duration)
         _check_start_time(start_time)
         if len(self.events) >= config.MAX_EVENTS_PER_SESSION:
             raise ValueError(
@@ -388,8 +416,7 @@ class Session:
             new_duration = _as_int(end_time, "end_time") - new_start
         if duration is not None:
             new_duration = _as_int(duration, "duration")
-        if new_duration <= 0:
-            raise ValueError("duration must be positive")
+        _check_duration(new_duration)
         _check_start_time(new_start)
 
         event.name = new_name
@@ -418,12 +445,14 @@ class Session:
         event = self.find_event(event_id)
         anchor_start = event.start_time
 
+        new_duration: int | None = None
         if field_name == "start_time":
             shifted: dict[str, int] = {event.id: event.start_time + delta}
         else:
-            if event.duration + delta <= 0:
+            new_duration = event.duration + delta
+            if new_duration <= 0:
                 raise ValueError("duration must stay positive")
-            event.duration += delta
+            _check_duration(new_duration)
             shifted = {event.id: event.start_time}
         if cascade:
             for other in self.events:
@@ -438,6 +467,12 @@ class Session:
                         f"shift rejected: {exc} (cascade may need to be unchecked "
                         f"or later events shortened)"
                     ) from exc
+        # Apply only after every validation passed: a rejected shift
+        # (bad cascade target, duration out of range) must change
+        # nothing — previously the anchor's duration was mutated before
+        # the cascade validation ran.
+        if new_duration is not None:
+            event.duration = new_duration
         for other in self.events:
             if other.id in shifted:
                 other.start_time = shifted[other.id]
@@ -455,8 +490,7 @@ class Session:
             clean_name = _check_name(item.get("name"))
             start_time = _as_int(item.get("start_time"), f"item {i}: start_time")
             duration = _as_int(item.get("duration"), f"item {i}: duration")
-            if duration <= 0:
-                raise ValueError(f"item {i}: duration must be positive")
+            _check_duration(duration, f"item {i}: duration")
             try:
                 _check_start_time(start_time, f"item {i}: start_time")
             except ValueError as exc:
@@ -482,7 +516,11 @@ class Session:
         writer.writerow(CSV_COLUMNS)
         for event in sorted(self.events, key=lambda e: e.start_time):
             writer.writerow(
-                [format_service_time(event.start_time), event.duration, event.name]
+                [
+                    format_service_time(event.start_time),
+                    event.duration,
+                    _csv_formula_safe(event.name),
+                ]
             )
         return buf.getvalue()
 
@@ -515,8 +553,7 @@ class Session:
             except ValueError as exc:
                 raise ValueError(f"CSV line {lineno}: {exc}") from exc
             name = row[2].strip() if len(row) > 2 else ""
-            if duration <= 0:
-                raise ValueError(f"CSV line {lineno}: duration must be positive")
+            _check_duration(duration, f"CSV line {lineno}: duration")
             items.append(
                 {"name": name, "start_time": start_time, "duration": duration}
             )

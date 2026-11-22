@@ -595,3 +595,41 @@ def test_expire():
     assert store.expire(max_age_seconds=100, now=1000.0) == ["old"]
     assert store.get("old") is None
     assert store.get("new") is not None
+
+
+# ------------------------------------------------- audit regressions
+
+
+def test_duration_upper_bound():
+    session = Session(name="t")
+    with pytest.raises(ValueError):
+        session.add_event("too long", 0, 86401)
+    session.add_event("all day", 0, 86400)  # boundary is fine
+    with pytest.raises(ValueError):
+        session.update_event(session.events[0].id, duration=10**9)
+    event = session.events[0]
+    session.update_event(event.id, end_time=86400, start_time=0)  # ok
+    with pytest.raises(ValueError):
+        session.update_event(event.id, remaining=10**9, now=100)
+
+
+def test_shift_duration_cap():
+    session = Session(name="t")
+    event = session.add_event("A", 0, 86400)
+    with pytest.raises(ValueError):
+        session.shift(event.id, "duration", 1, cascade=False)
+    assert event.duration == 86400
+
+
+def test_shift_duration_is_all_or_nothing():
+    """Regression: a duration shift whose cascade pushes a later event
+    past midnight must leave the anchor's duration unchanged.  The old
+    code mutated the duration before validating the cascade."""
+    session = Session(name="t")
+    a = session.add_event("A", 86300, 60)
+    b = session.add_event("B", 86390, 60)
+    with pytest.raises(ValueError):
+        session.shift(a.id, "duration", 30, cascade=True)
+    assert a.duration == 60
+    assert b.start_time == 86390
+    assert session.generation == 2  # rejected shift did not bump
