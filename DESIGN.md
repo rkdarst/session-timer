@@ -47,6 +47,10 @@ Allows one to view the events in the session and modify them.  There are control
   physically reachable (e.g. when the room lights go down).  The admin
   page itself stays full-brightness; its preview strip shows the
   dimmed result.
+* Dark mode for the admin screen, toggled with a 🌓 button and
+  remembered per browser (following the OS preference until first
+  toggled).  Unlike the room dimming this is local to one admin's
+  screen and never synced.
 * Download events as csv (`start_time,duration_sec,name`, with
   start_time as `H:MM:SS` service time)
 * Upload events as csv (replacing all current)

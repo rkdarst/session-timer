@@ -280,6 +280,7 @@ def test_pages_served(client):
         (f"/{NAME}/", "events-table"),
         (f"/{NAME}/", "preview-frame"),
         (f"/{NAME}/", ">Gap</th>"),
+        (f"/{NAME}/", "toggle-theme"),
         (f"/{NAME}/display", 'id="timer"'),
     ]:
         resp = client.get(path)

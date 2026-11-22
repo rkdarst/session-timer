@@ -407,6 +407,37 @@
   dimDarkerBtn.addEventListener("click", () => changeDim(1));
   dimLighterBtn.addEventListener("click", () => changeDim(-1));
 
+  // ------------------------------------ admin dark mode (local, per browser)
+
+  // A per-browser preference, not session state: dark mode affects only
+  // this admin screen (the synced room dimming is what affects the
+  // display panels).  With no saved choice, follow the OS preference.
+  const THEME_KEY = "session-timer:admin-dark";
+  const themeBtn = document.getElementById("toggle-theme");
+
+  try {
+    const saved = window.localStorage.getItem(THEME_KEY);
+    if (
+      saved === "1" ||
+      (saved === null &&
+        window.matchMedia &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches)
+    ) {
+      document.body.classList.add("dark");
+    }
+  } catch (err) {
+    /* localStorage unavailable; default to light */
+  }
+
+  themeBtn.addEventListener("click", () => {
+    const dark = document.body.classList.toggle("dark");
+    try {
+      window.localStorage.setItem(THEME_KEY, dark ? "1" : "0");
+    } catch (err) {
+      /* non-fatal: the choice just won't persist */
+    }
+  });
+
   const qrModal = document.getElementById("qr-modal");
   const qrCodeEl = document.getElementById("qr-code");
   const qrUrlEl = document.getElementById("qr-url");
