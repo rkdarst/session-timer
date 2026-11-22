@@ -90,6 +90,18 @@ Read-only.  Show a countdown timer until end time and progress bar along the bot
 
 The countdown progress bar takes the bottom 20% of the screen and slowly moves from left to right until it covers the whole duration.  It starts green, then turns yellow at 25% left, then red at 15% left.  The size of the main countdown text can be adjusted with +/- buttons in the upper-right corner (next to the fullscreen toggle; each click changes it by about 20%) and the choice is remembered per browser and synced to the session (via `PUT /api/{SESSION_NAME}/font-scale`, without changing the schedule's generation counter, so displays — which don't track generations — can send it) so the admin page's embedded preview mirrors it.  The screen can also be dimmed for dark rooms with darker/lighter buttons (same corner): a black overlay fades in steps up to 90% black, and the level is session state synced to every panel via `PUT /api/{SESSION_NAME}/dim` (again without affecting the generation), so an admin can dim displays remotely; the overlay sits beneath the control buttons so a human at a dimmed display can still brighten it.  The text size is capped so it never exceeds the screen.  After expiry, the counter continues to count up negative numbers while flashing (0.5Hz), the progress bar flashes (0.5Hz); 5 minutes after the event ended the countdown area reverts to the greyed-out 00:00 idle state.  While nothing is running and a future event exists (start_time after now) — including before the first event of the day — a white bar in the next-lowest 10% of the screen (20-30% from the bottom) fills until the next event starts, with a countdown of the time remaining until then — so the current speaker can see how much time is left until the next speaker should get started.  If the gap is longer than 10 minutes (no event starts within 10 minutes of the current event's end, or nothing is running at all), the white bar stays hidden until 10 minutes before the next event and fills across that window; shorter gaps fill from the moment the current event ends.
 
+Pages stay current over one WebSocket push channel, falling back to a
+5-second `/api/{SESSION_NAME}/state` poll (plus an hourly re-fetch to
+re-sync clock skew and DST) whenever the socket is down.  Reconnect
+attempts use exponential backoff: the first retry waits 1 second, each
+further failure doubles the wait up to a 5-minute cap, and a successful
+connection resets the ladder (tunables `CONFIG.reconnectBaseMs` /
+`CONFIG.reconnectMaxMs`).  While disconnected, a page keeps rendering
+the most recently received schedule — the countdown extrapolates server
+time locally, so it keeps ticking correctly even during a full outage —
+and catches up on edits as soon as any path (push, poll, or reconnect)
+delivers new state.
+
 
 ## Tools
 

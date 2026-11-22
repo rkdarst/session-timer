@@ -174,7 +174,11 @@ Clients send their known `generation` in the request (header
 
 1. Connect WS; fall back to polling `state` every 5 s if WS fails
    (plus an hourly `/state` re-fetch for skew/DST re-sync, from
-   `CONFIG.resyncIntervalMs`).
+   `CONFIG.resyncIntervalMs`).  Reconnects use exponential backoff
+   (`CONFIG.reconnectBaseMs` doubling to `CONFIG.reconnectMaxMs`,
+   1 s → 5 min cap, reset on a successful connection) so a long outage
+   is not hammered with 2 s retries; polling covers updates meanwhile.
+   Regression test: `node tests/js/test_ws_backoff.mjs`.
 2. Local ticking with `requestAnimationFrame`/`setInterval(…, 250)`;
    on every state receipt `ST.noteServerTime(data.server_time)`
    anchors the client clock to the server (extrapolated on monotonic

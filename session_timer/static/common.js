@@ -25,7 +25,9 @@ const ST = (() => {
    * Connect to the session's WebSocket push channel.  Calls onState
    * with the current state payload ({name, generation, events, ...})
    * whenever the server pushes new state.  Falls back to 5 s polling
-   * of /state while disconnected and reconnects automatically; an
+   * of /state while disconnected and reconnects automatically with
+   * exponential backoff (CONFIG.reconnectBaseMs doubling up to
+   * CONFIG.reconnectMaxMs, reset on a successful connection); an
    * hourly /state re-fetch re-syncs the server-time skew and the
    * session's utc_offset (DST) even when no mutation happens for
    * hours.  Server-time sync (noteServerTime) is applied centrally so
@@ -34,6 +36,9 @@ const ST = (() => {
   function connect(name, onState) {
     let ws = null;
     let reconnectTimer = null;
+    // Current reconnect wait; doubled on every failed attempt (see
+    // scheduleReconnect) and reset to the base on a successful open.
+    let reconnectDelayMs = CONFIG.reconnectBaseMs;
     let pollTimer = null;
     let resyncTimer = null;
 
@@ -70,7 +75,14 @@ const ST = (() => {
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
         open();
-      }, 2000);
+      }, reconnectDelayMs);
+      // Exponential backoff: every failed attempt doubles the next
+      // wait, capped at CONFIG.reconnectMaxMs.  ws.onopen resets the
+      // delay to the base once a connection succeeds.
+      reconnectDelayMs = Math.min(
+        reconnectDelayMs * 2,
+        CONFIG.reconnectMaxMs
+      );
     }
 
     function open() {
@@ -85,7 +97,12 @@ const ST = (() => {
         scheduleReconnect();
         return;
       }
-      ws.onopen = stopPolling;
+      ws.onopen = () => {
+        stopPolling();
+        // Connection succeeded: the next disconnect starts the backoff
+        // ladder over from the base again.
+        reconnectDelayMs = CONFIG.reconnectBaseMs;
+      };
       ws.onmessage = (event) => {
         let data;
         try {

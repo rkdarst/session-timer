@@ -29,9 +29,17 @@ const CONFIG = Object.freeze({
     0.33, 0.4, 0.48, 0.58, 0.69, 0.83, 1, 1.2, 1.45, 1.73, 2.07, 2.49, 2.99, 3.58, 4.3,
   ]),
 
-  // Admin page: duration (seconds) of the first "Add event" on an
-  // empty session.
-  newEventDefaultDuration: 600,
+   // Admin page: duration (seconds) of the first "Add event" on an
+   // empty session.
+   newEventDefaultDuration: 600,
+
+  // Both pages: WebSocket reconnect backoff.  The first retry after a
+  // disconnect waits reconnectBaseMs and every further failure doubles
+  // the wait up to reconnectMaxMs; a successful connection resets the
+  // ladder.  The 5 s /state polling fallback keeps the page updated
+  // (and receiving edits) in the meantime.
+  reconnectBaseMs: 1000,
+  reconnectMaxMs: 5 * 60 * 1000,
 
   // Both pages: how often to re-fetch the full state over HTTP while
   // connected (the WS already pushes every change).  This re-syncs the
