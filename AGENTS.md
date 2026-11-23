@@ -40,6 +40,12 @@ Phases 1–4 are implemented and verified:
   sends nothing (shift bumps the generation unconditionally); a
   rejected cascade re-renders the table before the error banner, so
   the typed value cannot linger stale.
+- Row-level "now" button (start column, next to +/-): sets the start
+  to the current minute — rounded backwards (the event is already
+  running; HH:MM stays clean) — and shifts later events by the same
+  delta per the toolbar cascade checkbox; delta 0 sends nothing.
+  Toolbar "Event now" also floors to the current minute now (was
+  exact seconds).
 - Sysadmin banner: `SESSION_TIMER_MESSAGE` (server environment, read
   once at startup, stripped and capped at 512 chars) is served by
   `GET /api/banner` and shown by admin.js inside the yellow warning

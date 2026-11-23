@@ -39,7 +39,7 @@ Allows one to view the events in the session and modify them.  There are control
   event by the same delta, through the same all-or-nothing cascade the
   +/− buttons use; off by default since it is rarely wanted)
 * Increase/decrease duration of event (also then delaying subsequent events, as found by start time)
-* Increase/decrease start time of event (also then delaying subsequent events)
+* Increase/decrease start time of event (also then delaying subsequent events), plus a "now" button setting the start to the current minute (rounded backwards: the event is already running and `HH:MM` stays clean; the same cascade rule applies)
 * Highlight overlapping events but not otherwise blocking them.
 * Show the remaining time only for the event currently being displayed
   (same current-event rule as the display page: greatest start_time <=
@@ -48,7 +48,7 @@ Allows one to view the events in the session and modify them.  There are control
 * Show the gap between each event and the next one (as found by start
   time) in a column: blank for the last event, negative (and red) when
   events overlap.
-* Quick "event now" setup.
+* Quick "event now" setup (starting at the current minute, rounded backwards).
 * Room dimming: "darker"/"lighter" buttons that fade the display
   screens toward black (steps up to 90% black), synced to every panel
   via the session — so an admin can dim displays that are not

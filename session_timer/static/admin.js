@@ -313,7 +313,11 @@
     }
   }
 
-  /** +/− buttons for start/duration; cascade per the toolbar checkbox. */
+  /** +/− buttons for start/duration; cascade per the toolbar checkbox.
+      Start rows also get a "now" button: sets the start to the current
+      minute (rounded backwards, so the event is already running and the
+      HH:MM column stays clean) and shifts later events by the same
+      delta per the same checkbox. */
   function makeStepButtons(ev, field, step) {
     const td = document.createElement("td");
     td.className = "step-buttons";
@@ -336,6 +340,33 @@
         );
       });
       td.appendChild(btn);
+    }
+    if (field === "start_time") {
+      const nowBtn = document.createElement("button");
+      nowBtn.textContent = "now";
+      nowBtn.title =
+        "Set this event's start to the current minute" +
+        (cascadeBox.checked
+          ? ", delaying later events by the same amount"
+          : " (only this event; 'delay later events' is unchecked)");
+      nowBtn.addEventListener("click", () => {
+        // Rounded backwards to the minute: the event is always already
+        // started (never stuck in the future) and the delta stays
+        // minute-aligned so the whole column keeps HH:MM granularity.
+        const delta = Math.floor(nowDaySeconds() / 60) * 60 - ev.start_time;
+        if (delta === 0) {
+          renderTable(); // already at the current minute: no request,
+          return; // no spurious generation bump
+        }
+        guard(() =>
+          mutate("/events/" + ev.id + "/shift", "POST", {
+            field: "start_time",
+            delta: delta,
+            cascade: cascadeBox.checked,
+          })
+        );
+      });
+      td.appendChild(nowBtn);
     }
     return td;
   }

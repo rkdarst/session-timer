@@ -274,12 +274,17 @@ def test_event_now_creates_event_starting_now(client):
     assert resp.status_code == 200
     event = resp.json()["events"][0]
     # start_time is wall-clock seconds of day in the session timezone
-    # (UTC here): server time of day, independent of any anchor date.
+    # (UTC here): the current minute, rounded backwards so the event is
+    # already running and the HH:MM column stays clean.
+    assert event["start_time"] % 60 == 0
     now_utc = time.gmtime()
     day_seconds = now_utc.tm_hour * 3600 + now_utc.tm_min * 60 + now_utc.tm_sec
-    assert abs(event["start_time"] - day_seconds) < 5 or abs(
+    # ~now, with slack for a minute boundary crossed between the two
+    # reads (floor adds up to 60 s); a midnight wrap between them shows
+    # up as a huge difference.
+    assert abs(event["start_time"] - day_seconds) < 120 or abs(
         event["start_time"] - day_seconds
-    ) > 86390  # midnight wrap between the two reads
+    ) > 86280  # midnight wrap between the two reads
 
 
 def test_event_now_without_timezone_400(client):

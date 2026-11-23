@@ -565,10 +565,15 @@ async def add_event(name: str, body: EventIn, x_generation: Annotated[int, Heade
 async def event_now(
     name: str, body: EventNowIn, x_generation: Annotated[int, Header()]
 ):
+    """Quick "event now": create an event starting at the current
+    minute, rounded backwards — the event is already running and the
+    HH:MM column (and CSV) stays free of second-level times."""
     session, _ = run_mutation(
         name,
         x_generation,
-        lambda s: s.add_event(body.name, day_seconds_now(s), body.duration),
+        lambda s: s.add_event(
+            body.name, (day_seconds_now(s) // 60) * 60, body.duration
+        ),
     )
     return await broadcast_state(name, session)
 
