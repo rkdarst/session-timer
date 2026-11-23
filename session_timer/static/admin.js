@@ -72,8 +72,13 @@
     });
   }
 
-  /** Send a mutation; the response carries the new canonical state. */
-  function mutate(path, method, body) {
+  /** Send a mutation; the response carries the new canonical state.
+      On a session without a timezone yet (a brand-new one), the stamp
+      rides along first: the server needs it for "event now"/"remaining",
+      and its response carries the bumped generation the real mutation
+      then uses — awaiting the stamp is what keeps that race-free. */
+  async function mutate(path, method, body) {
+    if (state.timezone == null) await stampTimezone();
     return ST.mutate(name, path, method, body, generationForRequest()).then((data) => {
       if (data && data.generation !== null && data.generation !== undefined) {
         state = data;
@@ -116,29 +121,49 @@
     return null;
   }
 
-  /** The session timezone is fixed by the first admin visit; when the
+  /** The session timezone is fixed by the first admin browser; when the
       session has none, stamp this browser's — silently, by design
       (DESIGN.md): the first admin's device is almost always the right
       clock, and anything else is fixable from the ☰ menu.  Only the
       server's "event now"/"remaining" features need it; editing works
-      regardless. */
-  function ensureTimezone() {
-    if (state.generation === null || state.timezone != null) return;
+      regardless.  Stamping an as-yet-uncreated session happens with the
+      first edit (see mutate) — never on a mere page view. */
+  let tzStampInFlight = null;
+
+  /** POST this browser's timezone (concurrent callers share one
+      in-flight request) and feed the response through onState, so the
+      state — including the bumped generation — is current for whatever
+      follows.  Resolves to the response data, or null when the browser
+      cannot report a zone or the request failed (the next edit/state
+      receipt retries). */
+  function stampTimezone() {
+    if (tzStampInFlight) return tzStampInFlight;
     const tz = browserTimezone();
-    if (!tz) return;
-    fetch("/api/" + encodeURIComponent(name) + "/timezone", {
+    if (!tz) return Promise.resolve(null);
+    tzStampInFlight = fetch("/api/" + encodeURIComponent(name) + "/timezone", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ timezone: tz }),
     })
       .then((resp) => (resp.ok ? resp.json() : null))
       .then((data) => {
+        tzStampInFlight = null;
         if (data) onState(data);
+        return data;
       })
       .catch(() => {
-        /* WS/polling will refresh; client-side editing works without
-           the timezone, only server-side "event now" needs it. */
+        tzStampInFlight = null;
+        return null;
       });
+    return tzStampInFlight;
+  }
+
+  function ensureTimezone() {
+    // Only for sessions that already exist: merely opening the page
+    // must not create one (a nonexistent session reports generation
+    // null).  A fresh session is stamped with its first edit instead.
+    if (state.generation === null || state.timezone != null) return;
+    stampTimezone();
   }
 
   /** Now of day in the session timezone (server time + utc_offset,

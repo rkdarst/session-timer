@@ -7,7 +7,7 @@ As a basic usage, there is a web timer for one event that counts down until an a
 
 ## Data model
 
-There are **sessions** at URL `/SESSION_NAME/`.  Simply navigating to a URL returns the empty session and making some active changes in the browser creates a session that gets synced (opening the admin page also stamps the session's timezone, which creates it).  Multiple admins (and displays) should be able to access at the same time and updates get pushed to all connected clients dynamically and immediately.
+There are **sessions** at URL `/SESSION_NAME/`.  Simply navigating to a URL returns the empty session and making some active changes in the browser creates a session that gets synced (the first *edit* also stamps the session's timezone — taken from the first admin browser — which creates it; merely opening pages never creates anything, and until that first edit the server-side "event now"/"remaining" features wait for a timezone).  Multiple admins (and displays) should be able to access at the same time and updates get pushed to all connected clients dynamically and immediately.
 
 The server holds canonical state, and any old state by clients is ignored.  Add a generation counter to detect old state by clients.  State is fully dynamic.  Admin clients shouldn't have old state, since updates get pushed to them immediately (if someone is currently editing, sorry).  So, if the state changes under an admin, it gets a push with the new generation number.  Any updates with this old state get rejected (should be infrequent - only on network difficulties) with a message to the admin and being told to refresh.
 

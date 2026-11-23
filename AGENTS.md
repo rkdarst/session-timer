@@ -46,6 +46,15 @@ Phases 1–4 are implemented and verified:
   delta per the toolbar cascade checkbox; delta 0 sends nothing.
   Toolbar "Event now" also floors to the current minute now (was
   exact seconds).
+- First-visit timezone fix: the stamp now rides along with the first
+  edit (mutate() awaits a stamp when the session has no timezone yet —
+  its response carries the bumped generation the mutation then uses),
+  so "Event now"/"remaining" work on the very first click of a
+  brand-new session.  Previously ensureTimezone skipped not-yet-
+  existing sessions, so the first visit failed with "session timezone
+  is not set" until a reload.  Merely opening pages still creates
+  nothing (DESIGN.md's "opening the admin page stamps …" wording
+  corrected to first-edit).
 - Sysadmin banner: `SESSION_TIMER_MESSAGE` (server environment, read
   once at startup, stripped and capped at 512 chars) is served by
   `GET /api/banner` and shown by admin.js inside the yellow warning
