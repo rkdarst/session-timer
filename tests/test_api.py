@@ -351,6 +351,7 @@ def test_pages_served(client):
         (f"/{NAME}/", "show-help"),
         (f"/{NAME}/", "menu-btn"),
         (f"/{NAME}/", "set-timezone"),
+        (f"/{NAME}/", "edit-cascade"),
         (f"/{NAME}/", ">Speaker view</a>"),  # toolbar link (was menu item)
         (f"/{NAME}/", "config.js"),
         (f"/{NAME}/display", 'id="timer"'),

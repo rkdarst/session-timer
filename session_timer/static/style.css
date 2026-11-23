@@ -394,6 +394,19 @@ td.gap.negative {
   background: var(--btn-hover);
 }
 
+/* A menu checkbox (editing-mode toggle): laid out like the menu items
+   but without button chrome.  Clicking it must NOT close the menu —
+   the auto-close handler only matches button/a targets. */
+.dropdown-menu .menu-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  padding: 0.25rem 0.75rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 #display-link {
   display: inline-block;
   text-decoration: none;

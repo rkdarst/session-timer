@@ -28,9 +28,18 @@ Phases 1–4 are implemented and verified:
 - `tests/test_store.py`, `tests/test_api.py` — all tests passing
 - Admin toolbar: add/event-now/cascade/preview/dim buttons stay
   visible; overflow actions (display link, QR, CSV download/upload,
-  dark-mode toggle) live behind a ☰ hamburger menu that auto-closes;
+  the "Manual edits delay later events" checkbox, dark-mode toggle)
+  live behind a ☰ hamburger menu that auto-closes;
   a permanent "Events are NOT saved long term" banner sits at the top
   and a Help button opens a concise popup
+- Manual-edit cascade (☰ menu checkbox, off by default): a typed
+  start/duration edit then goes to the shift endpoint as
+  `delta = new − old` with `cascade: true` (duration edits shift later
+  starts) instead of an absolute PATCH — reusing the store's
+  all-or-nothing cascade validation; no server changes.  Delta 0
+  sends nothing (shift bumps the generation unconditionally); a
+  rejected cascade re-renders the table before the error banner, so
+  the typed value cannot linger stale.
 - Sysadmin banner: `SESSION_TIMER_MESSAGE` (server environment, read
   once at startup, stripped and capped at 512 chars) is served by
   `GET /api/banner` and shown by admin.js inside the yellow warning
@@ -319,4 +328,8 @@ Clients send their known `generation` in the request (header
 - Display URL derivability (`/{name}/display` reveals `/{name}/`) —
   currently accepted by design; if that changes, display needs its own
   token.
+- Deferred (user request): allow start times at/after 24:00:00 for
+  manual edits and cascades (they belong to the next day's run and
+  never become "current"); today all of add/update/shift/CSV-upload
+  reject starts at or past 24:00:00 (times live in `[0, 86400)`).
 

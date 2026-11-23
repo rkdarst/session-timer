@@ -41,6 +41,10 @@
       <button id="download-csv">Download CSV</button>
       <button id="upload-csv-btn">Upload CSV</button>
       <input type="file" id="upload-csv" accept=".csv,text/csv" hidden>
+      <label class="menu-checkbox" title="When checked, typing a new start or duration shifts every later event by the same amount — like the +/- cascade checkbox, but for direct table edits.  Off by default; for rare big re-timings.">
+        <input type="checkbox" id="edit-cascade">
+        Manual edits delay later events
+      </label>
       <button id="set-timezone" title="Make the session follow this browser's timezone: the HH:MM schedule stays, absolute times shift">Set timezone to this browser</button>
       <button id="show-state" title="Show the raw JSON state as this client sees it">Show raw state</button>
       <button id="toggle-theme" title="Toggle dark mode (this screen only)">Dark mode: off</button>
@@ -89,6 +93,10 @@
       <li><b>+/- nudge by a minute.</b> With "delay later events" checked,
         they cascade to everything starting after (shown in the Gap
         column; negative = overlap, not blocked).</li>
+      <li><b>Manual edits delay later events</b> (☰ menu, off by
+        default): when checked, typing a new start or duration shifts
+        every later event by the same amount — for big re-timings where
+        clicking +/− many times is impractical.</li>
       <li><b>Everything syncs live</b> across all open panels. If someone
         else edits while you do, you'll be asked to refresh. Displays do
         not need a correct clock &mdash; time comes from the server.</li>

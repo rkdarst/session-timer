@@ -6,6 +6,8 @@
   const staleBanner = document.getElementById("stale-banner");
   const errorBanner = document.getElementById("error-banner");
   const cascadeBox = document.getElementById("cascade");
+  // ☰ menu: typed edits shift later events too (off by default).
+  const editCascadeBox = document.getElementById("edit-cascade");
 
   let state = {
     name: name,
@@ -249,11 +251,22 @@
     guard(async () => {
       if (field === "name") {
         await mutate("/events/" + eid, "PATCH", { name: input.value });
-      } else if (field === "start_time") {
+        return;
+      }
+      // Canonical current values from the last received state (not the
+      // DOM): the cascade delta must be relative to what the server
+      // actually has.
+      const ev = state.events.find((e) => e.id === eid);
+      const cascade = editCascadeBox.checked && ev !== undefined;
+      if (field === "start_time") {
         const daySecs = ST.parseServiceTime(input.value);
         if (daySecs === null) {
           error("Invalid start time — use HH:MM (24-hour)");
           renderTable();
+          return;
+        }
+        if (cascade) {
+          await commitShifted(eid, "start_time", daySecs, ev.start_time);
           return;
         }
         await mutate("/events/" + eid, "PATCH", { start_time: daySecs });
@@ -264,9 +277,40 @@
           renderTable();
           return;
         }
+        if (cascade) {
+          await commitShifted(eid, "duration", duration, ev.duration);
+          return;
+        }
         await mutate("/events/" + eid, "PATCH", { duration: duration });
       }
     });
+  }
+
+  /** Manual edit with ☰ "Manual edits delay later events" checked:
+      send the delta to the shift endpoint with cascade=true, so every
+      event starting later moves by the same amount (a duration edit
+      shifts later starts; the server validates the whole cascade
+      all-or-nothing).  Delta 0 is skipped: shift bumps the generation
+      unconditionally, so a no-op request would push a spurious update
+      to every client.  On rejection the table re-renders first, so the
+      typed value cannot linger inconsistent with the untouched later
+      rows; guard() then shows the server's error. */
+  async function commitShifted(eid, field, newValue, oldValue) {
+    const delta = newValue - oldValue;
+    if (delta === 0) {
+      renderTable();
+      return;
+    }
+    try {
+      await mutate("/events/" + eid + "/shift", "POST", {
+        field: field,
+        delta: delta,
+        cascade: true,
+      });
+    } catch (err) {
+      renderTable();
+      throw err;
+    }
   }
 
   /** +/− buttons for start/duration; cascade per the toolbar checkbox. */

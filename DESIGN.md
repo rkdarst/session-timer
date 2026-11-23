@@ -33,7 +33,11 @@ Allows one to view the events in the session and modify them.  There are control
 * Table-like view
 * Add event
 * Delete event
-* Set event start / end / duration / remaining times (not affecting other events)
+* Set event start / end / duration / remaining times (not affecting
+  other events — unless the ☰ menu's "Manual edits delay later events"
+  checkbox is on: then a typed start/duration change shifts every later
+  event by the same delta, through the same all-or-nothing cascade the
+  +/− buttons use; off by default since it is rarely wanted)
 * Increase/decrease duration of event (also then delaying subsequent events, as found by start time)
 * Increase/decrease start time of event (also then delaying subsequent events)
 * Highlight overlapping events but not otherwise blocking them.
@@ -61,13 +65,17 @@ Allows one to view the events in the session and modify them.  There are control
   popup with the main points (URL = access, times-of-day semantics,
   cascade, display colors, memory-only data).
 * Toolbar overflow behind a ☰ hamburger menu (top right): display
-  page link, QR code, CSV download/upload, "Set timezone to this
+  page link, QR code, CSV download/upload, a "Manual edits delay later
+  events" checkbox (off by default: when on, typing a new start or
+  duration shifts every later event by the same delta — the manual-edit
+  counterpart of the +/− cascade), "Set timezone to this
   browser" (forced re-set of the session timezone: HH:MM schedule
   kept, absolute times shift by the zone difference), "Show raw
   state" (the JSON as this client sees it, including `server_time` —
   a handy clock-skew diagnostic), and the dark-mode toggle (shown as
   "Dark mode: on/off").  The menu auto-closes after any action, on
-  Escape, or on a click anywhere outside it.
+  Escape, or on a click anywhere outside it (the checkbox toggles
+  without closing).
 * Download events as csv (`start_time,duration_sec,name`, with
   start_time as `H:MM:SS` time of day; starts at or past 24:00:00 are
   rejected on upload — sessions cannot span midnight)
