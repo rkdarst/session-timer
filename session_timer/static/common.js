@@ -182,13 +182,21 @@ const ST = (() => {
   /**
    * The next event that has not started yet at time `now`: the event
    * with the smallest start_time > now (ties: first in the list).
-   * Returns null when every event has already started.  Shared by the
-   * display page's "next speaker" bar.
+   * Events at/after 24:00:00 are excluded: they belong to the next
+   * day's run and never trigger (now-of-day stays below 86400), so
+   * counting down to one in the day's last minutes would end at a
+   * midnight vanish instead of a start.  Returns null when every
+   * event has already started.  Shared by the display page's "next
+   * speaker" bar.
    */
   function nextEvent(events, now) {
     let next = null;
     for (const ev of events || []) {
-      if (ev.start_time > now && (next === null || ev.start_time < next.start_time)) {
+      if (
+        ev.start_time < 86400 &&
+        ev.start_time > now &&
+        (next === null || ev.start_time < next.start_time)
+      ) {
         next = ev;
       }
     }

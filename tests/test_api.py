@@ -69,26 +69,42 @@ def test_max_events_rejected_via_csv_upload(client):
     assert [e["name"] for e in state["events"]] == ["keep"]
 
 
-def test_add_event_start_outside_day_rejected(client):
-    r = add_event(client, 0, "too late", 86400, 60)
+def test_add_event_start_range(client):
+    # 24:00:00 and later are next-day early hours: accepted as data,
+    # never "current".
+    r = add_event(client, 0, "after midnight", 86400, 60)
+    assert r.status_code == 200
+    assert r.json()["events"][-1]["start_time"] == 86400
+    assert add_event(client, 1, "also bad", -60, 60).status_code == 400
+    # the two-service-day window is the hard bound
+    r = add_event(client, 1, "way too late", 172800, 60)
     assert r.status_code == 400
-    assert "midnight" in r.json()["detail"]
-    assert add_event(client, 0, "also bad", -60, 60).status_code == 400
-    # boundary: 86399 is the last valid second of the day
-    assert add_event(client, 0, "just fits", 86399, 1).status_code == 200
+    assert "47:59:59" in r.json()["detail"]
+    # 172799 = 47:59:59, the last valid second of the two-day window
+    assert add_event(client, 1, "just fits", 172799, 1).status_code == 200
 
 
-def test_csv_upload_rejects_start_at_or_past_midnight(client):
-    # Exports from the pre-2026 anchor-based model can contain
-    # >=24:00:00 times; reject them with a clear, actionable error.
+def test_csv_upload_accepts_next_day_times(client):
+    # 24:00:00 and later are next-day early hours (GTFS-style): kept as
+    # data, never "current".  Pre-2026 anchor-based exports load again.
     r = client.put(
         f"/api/{NAME}/events.csv",
-        content="24:00:00,60,after midnight\n",
+        content="24:00:00,60,after midnight\n25:30,60,early hours\n",
         headers={**gen(0), "Content-Type": "text/csv"},
     )
+    assert r.status_code == 200
+    assert [e["start_time"] for e in r.json()["events"]] == [86400, 91800]
+    # ...but the 48-hour window still bounds the data (the CSV time
+    # parser itself rejects hours > 47).
+    r = client.put(
+        f"/api/{NAME}/events.csv",
+        content="48:00:00,60,beyond two days\n",
+        headers={**gen(1), "Content-Type": "text/csv"},
+    )
     assert r.status_code == 400
-    assert "midnight" in r.json()["detail"]
-    assert store.get(NAME).events == []
+    assert "out of range" in r.json()["detail"]
+    # all-or-nothing: the accepted upload is unchanged
+    assert [e.start_time for e in store.get(NAME).events] == [86400, 91800]
 
 
 def test_csv_upload_accepts_23_59_59(client):
@@ -101,7 +117,9 @@ def test_csv_upload_accepts_23_59_59(client):
     assert [e["start_time"] for e in r.json()["events"]] == [86399]
 
 
-def test_shift_endpoint_rejects_cascade_past_midnight(client):
+def test_shift_endpoint_cascade_into_next_day(client):
+    """Cascades may push events past 24:00:00; the two-day window is
+    still all-or-nothing."""
     first = add_event(client, 0, "a", 86300, 10).json()["events"][0]
     add_event(client, 1, "b", 86350, 10)
     r = client.post(
@@ -109,8 +127,18 @@ def test_shift_endpoint_rejects_cascade_past_midnight(client):
         json={"field": "start_time", "delta": 100, "cascade": True},
         headers=gen(2),
     )
+    assert r.status_code == 200
+    assert [e["start_time"] for e in r.json()["events"]] == [86400, 86450]
+    # Pushing past 47:59:59 rejects the whole cascade.
+    r = client.post(
+        f"/api/{NAME}/events/{first['id']}/shift",
+        json={"field": "start_time", "delta": 90000, "cascade": True},
+        headers=gen(3),
+    )
     assert r.status_code == 400
-    assert "midnight" in r.json()["detail"]
+    assert "47:59:59" in r.json()["detail"]
+    state = client.get(f"/api/{NAME}/state").json()
+    assert [e["start_time"] for e in state["events"]] == [86400, 86450]
 
 
 def test_session_cap_returns_503(client):

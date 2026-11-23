@@ -74,10 +74,13 @@ Phases 1–4 are implemented and verified:
   because user middleware sits outside the ExceptionMiddleware layer).
   Tests: 107 passing.
 - Times are **wall-clock times of day** in the session timezone
-  (seconds of day in `[0, 86400)`; sessions are reusable daily
-  templates that reset at the zone's midnight): admin start column
-  shows/edits `HH:MM`, CSV is `H:MM:SS` (uploads at/past 24:00:00
-  rejected).  Sessions carry an IANA `timezone` stamped by the first
+  (seconds of the service day in `[0, 172800)`; sessions are reusable
+  daily templates that reset at the zone's midnight): admin start
+  column shows/edits `HH:MM` (hours may reach 47), CSV is `H:MM:SS`.
+  Starts at/past 24:00:00 are next-day early hours — kept as data,
+  sort last, never become "current" (never trigger); the display's
+  "Next" bar skips them (`ST.nextEvent`).  Sessions carry an IANA
+  `timezone` stamped by the first
   admin browser (`POST /api/{name}/timezone`, force-resettable from
   the menu); the server resolves `utc_offset` (zoneinfo) and
   broadcasts it with `server_time` in every state payload; clients
@@ -328,8 +331,4 @@ Clients send their known `generation` in the request (header
 - Display URL derivability (`/{name}/display` reveals `/{name}/`) —
   currently accepted by design; if that changes, display needs its own
   token.
-- Deferred (user request): allow start times at/after 24:00:00 for
-  manual edits and cascades (they belong to the next day's run and
-  never become "current"); today all of add/update/shift/CSV-upload
-  reject starts at or past 24:00:00 (times live in `[0, 86400)`).
 

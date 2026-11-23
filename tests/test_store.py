@@ -454,40 +454,73 @@ def test_parse_service_time():
 
 # ------------------------------------------------- start-time range
 
-def test_add_event_rejects_start_outside_one_day():
+def test_add_event_start_range():
+    """-1 is invalid; 24:00:00+ is next-day early hours (accepted,
+    never "current"); the two-service-day window (47:59:59) bounds."""
     session = Session(name="t")
     with pytest.raises(ValueError, match="0:00"):
         session.add_event("", -1, 60)
-    with pytest.raises(ValueError, match="midnight"):
-        session.add_event("", 86400, 60)
-    with pytest.raises(ValueError, match="midnight"):
-        session.add_event("", 90000, 60)
-    assert session.events == []
-    assert session.generation == 0  # rejected mutations change nothing
+    session.add_event("", 86400, 60)
+    session.add_event("", 90000, 60)
+    assert [e.start_time for e in session.events] == [86400, 90000]
+    with pytest.raises(ValueError, match="47:59:59"):
+        session.add_event("", 172800, 60)
+    assert session.generation == 2  # rejected mutation changed nothing
 
 
-def test_update_event_rejects_start_outside_one_day():
+def test_update_event_start_range():
     session = make_session(("a", 86300, 60))
     event = session.events[0]
-    with pytest.raises(ValueError, match="midnight"):
-        session.update_event(event.id, start_time=86400)
-    # a "remaining" that lands past midnight is rejected too
-    with pytest.raises(ValueError, match="midnight"):
-        session.update_event(event.id, remaining=600, now=86300)
+    # Landing at 24:08:20 (next-day early hours) is accepted now...
+    session.update_event(event.id, remaining=600, now=86300)
+    assert event.start_time == 86900
+    assert session.generation == 2
+    # ...but the two-service-day window still applies.
+    with pytest.raises(ValueError, match="47:59:59"):
+        session.update_event(event.id, start_time=172800)
+    # a "remaining" that lands past 47:59:59 is rejected too
+    with pytest.raises(ValueError, match="47:59:59"):
+        session.update_event(event.id, remaining=90000, now=86300)
     # ...and nothing changed
-    assert event.start_time == 86300
-    assert session.generation == 1
+    assert event.start_time == 86900
+    assert session.generation == 2
 
 
-def test_shift_rejects_result_outside_one_day():
-    session = make_session(("a", 86300, 60), ("b", 86400 - 90, 30))
+def test_shift_cascade_into_next_day():
+    """Cascades may push events past 24:00:00 (next-day early hours)
+    but not past the 47:59:59 window end; all-or-nothing either way."""
+    session = make_session(("a", 86300, 10), ("b", 86350, 10))
+    a, b = session.events
+    session.shift(a.id, "start_time", 100, cascade=True)
+    assert (a.start_time, b.start_time) == (86400, 86450)
+    with pytest.raises(ValueError, match="47:59:59"):
+        session.shift(a.id, "start_time", 90000, cascade=True)
+    assert (a.start_time, b.start_time) == (86400, 86450)  # unchanged
+
+
+def test_csv_round_trip_next_day_time():
+    """format_service_time emits 25:30 (hours > 23, GTFS-style) and the
+    import parses it back — no wrapping, no data loss."""
+    session = make_session(("late", 91800, 60))  # 25:30
+    text = session.to_csv()
+    assert text.splitlines()[1] == "25:30,60,late"
+    other = Session(name="t2")
+    assert other.replace_from_csv(text) == 1
+    assert other.events[0].start_time == 91800
+
+
+def test_shift_rejects_result_outside_window():
+    """Shifts may cross midnight (24:00:00+) but not the 47:59:59 end
+    of the two-service-day window; rejections name the offender and
+    change nothing."""
+    session = make_session(("a", 172700, 60), ("b", 172750, 30))
     a, b = session.events
     with pytest.raises(ValueError, match="'a'"):
         session.shift(a.id, "start_time", 100, cascade=False)
-    # cascading past midnight: the *later* event is the offender
+    # cascading past the window end: the *later* event is the offender
     with pytest.raises(ValueError, match="cascade"):
         session.shift(a.id, "start_time", 100, cascade=True)
-    assert [e.start_time for e in session.events] == [86300, 86310]
+    assert [e.start_time for e in session.events] == [172700, 172750]
     assert session.generation == 2  # make_session added 2; shifts all rejected
 
 
@@ -623,15 +656,16 @@ def test_shift_duration_cap():
 
 def test_shift_duration_is_all_or_nothing():
     """Regression: a duration shift whose cascade pushes a later event
-    past midnight must leave the anchor's duration unchanged.  The old
-    code mutated the duration before validating the cascade."""
+    past the two-service-day window must leave the anchor's duration
+    unchanged.  The old code mutated the duration before validating the
+    cascade."""
     session = Session(name="t")
-    a = session.add_event("A", 86300, 60)
-    b = session.add_event("B", 86390, 60)
+    a = session.add_event("A", 172700, 60)
+    b = session.add_event("B", 172750, 60)
     with pytest.raises(ValueError):
-        session.shift(a.id, "duration", 30, cascade=True)
+        session.shift(a.id, "duration", 60, cascade=True)
     assert a.duration == 60
-    assert b.start_time == 86390
+    assert b.start_time == 172750
     assert session.generation == 2  # rejected shift did not bump
 
 

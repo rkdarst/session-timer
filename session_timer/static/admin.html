@@ -89,7 +89,9 @@
         follows one timezone &mdash; fixed by the first admin visit; ☰ &rarr;
         "Set timezone to this browser" on a device in the right room if it
         is wrong. At that zone's midnight the day resets, so the same
-        schedule runs again tomorrow; events cannot start past 23:59:59.</li>
+        schedule runs again tomorrow.  Events may be scheduled up to
+        47:59 (hours of 24 or later are the next day's early hours and
+        never trigger on today's run).</li>
       <li><b>+/- nudge by a minute.</b> With "delay later events" checked,
         they cascade to everything starting after (shown in the Gap
         column; negative = overlap, not blocked).</li>

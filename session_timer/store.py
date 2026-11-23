@@ -2,10 +2,12 @@
 
 See ``DESIGN.md`` for the behavioral spec and ``AGENTS.md`` for
 implementation notes.  Sessions are *daily schedule templates*:
-``start_time`` is wall-clock seconds of day (0 <= start < 86400) in the
-session's timezone; the day resets at that zone's local midnight, so a
-session is equally usable every day (events cannot start past
-23:59:59).  Each session stores an IANA ``timezone`` name; the server
+``start_time`` is wall-clock seconds of the service day (0 <= start <
+48*3600) in the session's timezone; the day resets at that zone's local
+midnight, so a session is equally usable every day.  Events may spill
+past 24:00:00 into the next day's early hours (GTFS-style hours >= 24):
+they are kept as data and never become "current".  Each session stores
+an IANA ``timezone`` name; the server
 resolves the zone's *current* UTC offset (``zoneinfo``) and broadcasts
 it, so clients need no timezone database of their own.
 
@@ -45,9 +47,14 @@ CSV_COLUMNS = ("start_time", "duration_sec", "name")
 
 SNAPSHOT_VERSION = 1
 
-# Wall-clock start times are seconds of day; a session cannot span
-# midnight (per DESIGN.md, the daily-template tradeoff).
-MAX_DAY_SECONDS = 24 * 3600
+# Wall-clock start times are seconds of the service day.  A session is
+# a daily template that resets at midnight, but events may spill past
+# 24:00:00 into the next day's early hours (GTFS-style hours >= 24):
+# they are kept as data, sort after everything else, and never become
+# "current" (now-of-day never reaches them) — tomorrow's first events,
+# parked at the end of today's list.  Capped at two days (48:00:00),
+# matching the CSV/client parsers (hours <= 47).
+MAX_DAY_SECONDS = 2 * 24 * 3600
 
 _TZ_NAME_RE = re.compile(r"^[A-Za-z0-9_+./-]{1,64}$")
 
@@ -55,8 +62,9 @@ _TZ_NAME_RE = re.compile(r"^[A-Za-z0-9_+./-]{1,64}$")
 def _check_start_time(value: int, what: str = "start_time") -> int:
     if not 0 <= value < MAX_DAY_SECONDS:
         raise ValueError(
-            f"{what} must be a time of day between 0:00 and 23:59:59 "
-            f"(got {value}s); sessions cannot span midnight"
+            f"{what} must be a time of day between 0:00 and 47:59:59 "
+            f"(got {value}s); hours of 24 or later belong to the next "
+            f"day's run and never trigger today"
         )
     return value
 
@@ -435,9 +443,10 @@ class Session:
         DESIGN.md) the same ``delta`` is applied to the start time of
         every event that starts strictly later than the shifted event's
         original start time ("subsequent events, as found by start
-        time").  All resulting start times must stay within one day;
-        the whole shift is rejected otherwise (naming the offending
-        event, since a cascade can push a *later* event out of range).
+        time").  All resulting start times must stay within the
+        two-service-day window (0:00–47:59:59); the whole shift is
+        rejected otherwise (naming the offending event, since a cascade
+        can push a *later* event out of range).
         """
         if field_name not in ("start_time", "duration"):
             raise ValueError("field must be 'start_time' or 'duration'")
