@@ -67,6 +67,13 @@ Phases 1–4 are implemented and verified:
   (`/healthz`, `/healthz/`) answer it; the OpenAPI schema is disabled
   (`openapi_url=None`), so `/docs` and `/openapi.json` fall through to
   the empty-404 catch-all like every other unknown path.
+- Small clocks on both pages showing the *session's* current time
+  (server-anchored `ST.dayNow` — the clock the schedule runs on), via
+  the shared `ST.fmtClock` (zero-padded HH:MM[:SS]): display page =
+  top-left, HH:MM, toggled per browser with a ⏱ control (persisted in
+  localStorage like the font size, default on; the admin preview shows
+  the default look); admin page = toolbar, HH:MM:SS, always on, with
+  the ☰ timezone line setting its title.
 - Sysadmin banner: `SESSION_TIMER_MESSAGE` (server environment, read
   once at startup, stripped and capped at 512 chars) is served by
   `GET /api/banner` and shown by admin.js inside the yellow warning

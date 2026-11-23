@@ -245,6 +245,20 @@ const ST = (() => {
     return s !== 0 ? h + ":" + m + ":" + pad(s) : h + ":" + m;
   }
 
+  /** Seconds of day -> zero-padded "HH:MM" (or "HH:MM:SS"), for the
+      small clocks on the admin and display pages.  Unlike
+      fmtServiceTime this pads the hour (a clock reads better as
+      "09:05") and never exceeds 24h (it shows *now*, which dayNow
+      already wraps). */
+  function fmtClock(daySeconds, withSeconds) {
+    const total = Math.floor(daySeconds);
+    const pad = (n) => String(n).padStart(2, "0");
+    const h = pad(Math.floor(total / 3600) % 24);
+    const m = pad(Math.floor((total % 3600) / 60));
+    if (!withSeconds) return h + ":" + m;
+    return h + ":" + m + ":" + pad(total % 60);
+  }
+
   /** "H:MM" or "H:MM:SS" (24-hour) -> service-day seconds, or null if
       invalid.  Lenient about leading zeros; hours may be 0-47 so a
       time just past midnight can be written as e.g. "24:30". */
@@ -323,6 +337,7 @@ const ST = (() => {
     nextEvent,
     fmtDuration,
     fmtServiceTime,
+    fmtClock,
     parseServiceTime,
     noteServerTime,
     serverNow,

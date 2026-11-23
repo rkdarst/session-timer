@@ -5,6 +5,7 @@
   const tbody = document.querySelector("#events-table tbody");
   const staleBanner = document.getElementById("stale-banner");
   const errorBanner = document.getElementById("error-banner");
+  const clockEl = document.getElementById("clock");
   const cascadeBox = document.getElementById("cascade");
   // ☰ menu: typed edits shift later events too (off by default).
   const editCascadeBox = document.getElementById("edit-cascade");
@@ -176,6 +177,7 @@
     if (!el) return;
     if (!state.timezone) {
       el.textContent = "Timezone: not set yet";
+      clockEl.title = "Current time in the session timezone";
       return;
     }
     let text = state.timezone;
@@ -193,6 +195,7 @@
       text += " — this browser: " + browserTz;
     }
     el.textContent = text;
+    clockEl.title = "Current time in " + state.timezone;
   }
 
   /** Now of day in the session timezone (server time + utc_offset,
@@ -492,7 +495,17 @@
     }
   }
 
-  setInterval(updateRemaining, 1000);
+  /** Small toolbar clock: the session zone's current time (the clock
+      the schedule runs on), refreshed with the remaining-column tick. */
+  function updateClock() {
+    clockEl.textContent = ST.fmtClock(nowDaySeconds(), true);
+  }
+
+  setInterval(() => {
+    updateRemaining();
+    updateClock();
+  }, 1000);
+  updateClock();
 
   // ------------------------------------------- speaker-view link + QR popup
 

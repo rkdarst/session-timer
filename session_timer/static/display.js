@@ -12,6 +12,8 @@
   const fullscreenBtn = document.getElementById("fullscreen");
   const fontSmallerBtn = document.getElementById("font-smaller");
   const fontBiggerBtn = document.getElementById("font-bigger");
+  const clockEl = document.getElementById("clock");
+  const clockToggleBtn = document.getElementById("clock-toggle");
   const name = ST.sessionName();
   // Flashing after expiry is capped: FLASH_LIMIT after an event ends the
   // counter and bar stop flashing (steady red, still counting negative).
@@ -117,6 +119,7 @@
     // wrapped at midnight (serverNow tracks the server clock via
     // noteServerTime, so a wrong display clock self-corrects).
     const now = ST.dayNow(utcOffset);
+    if (clockVisible) clockEl.textContent = ST.fmtClock(now);
     const current = ST.currentEvent(events, now);
     const remaining =
       current === null ? null : current.start_time + current.duration - now;
@@ -216,6 +219,7 @@
   // step reaches zero black border.
   const FONT_SCALES = CONFIG.fontScales;
   const FONT_SCALE_KEY = "session-timer:font-scale";
+  const CLOCK_KEY = "session-timer:clock";
 
   const measureCtx = document.createElement("canvas").getContext("2d");
 
@@ -290,6 +294,36 @@
   }
 
   let fontIndex = loadFontIndex();
+
+  /** Clock visibility: per-display-browser, persisted like the font
+      scale.  Defaults to on.  The admin-page preview (embed) always
+      shows the clock in its default look — a localStorage setting
+      cannot be mirrored via the server the way the font scale is. */
+  function loadClockVisible() {
+    if (embed) return true;
+    try {
+      return window.localStorage.getItem(CLOCK_KEY) !== "0";
+    } catch (err) {
+      return true; // localStorage unavailable (privacy mode etc.): on
+    }
+  }
+  let clockVisible = loadClockVisible();
+
+  function applyClock() {
+    clockEl.hidden = !clockVisible;
+  }
+
+  clockToggleBtn.addEventListener("click", () => {
+    clockVisible = !clockVisible;
+    applyClock();
+    if (embed) return; // the preview never persists (its toggle is hidden)
+    try {
+      window.localStorage.setItem(CLOCK_KEY, clockVisible ? "1" : "0");
+    } catch (err) {
+      /* non-fatal: visibility just won't persist */
+    }
+  });
+  applyClock();
 
   /** Set the rendered size and button states from fontIndex; called by
       render() on every tick so the fit cap tracks the current text. */

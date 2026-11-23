@@ -411,10 +411,13 @@ def test_pages_served(client):
         (f"/{NAME}/", "edit-cascade"),
         (f"/{NAME}/", "tz-indicator"),
         (f"/{NAME}/", "event-now-menu"),
+        (f"/{NAME}/", 'id="clock"'),
         (f"/{NAME}/", ">Speaker view</a>"),  # toolbar link (was menu item)
         (f"/{NAME}/", "config.js"),
         (f"/{NAME}/display", 'id="timer"'),
         (f"/{NAME}/display", "config.js"),
+        (f"/{NAME}/display", 'id="clock"'),
+        (f"/{NAME}/display", "clock-toggle"),
         (f"/{NAME}/iframe", 'id="bar"'),
         (f"/{NAME}/iframe", "next-bar"),
         (f"/{NAME}/iframe", "iframe.js"),

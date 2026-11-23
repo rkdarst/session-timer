@@ -52,6 +52,23 @@ body.display {
 #timer.yellow { color: var(--yellow); }
 #timer.red { color: var(--red); }
 
+/* Small clock on the display page, top-left (the controls sit
+   top-right): the session's own time, server-anchored — on a correctly
+   stamped session that is the room clock.  Toggleable per display
+   browser (display.js, remembered like the font size).  Scoped to
+   body.display: the admin page's #clock is a plain in-flow toolbar
+   item (.toolbar-clock below), not this fixed overlay. */
+body.display #clock {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  color: #fff;
+  opacity: 0.7;
+  font-size: min(4vw, 6vh);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
 #bar-wrap {
   position: fixed;
   left: 0;
@@ -276,6 +293,15 @@ body.admin.dark {
   flex-wrap: wrap;
   align-items: center;
   margin-bottom: 1rem;
+}
+
+/* Small session-time clock in the toolbar (HH:MM:SS in the session
+   timezone — the clock the schedule runs on; see the ☰ menu's timezone
+   line for which zone that is). */
+.toolbar-clock {
+  font-size: 0.9rem;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
 }
 
 table {
