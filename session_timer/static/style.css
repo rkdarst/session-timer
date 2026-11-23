@@ -238,6 +238,7 @@ body.admin {
   --btn-hover: #e2e2e2;
   --overlap-bg: #fff3cd;
   --current-bg: #d4f7d4;
+  --next-bg: #dbe7f7;
   background: var(--page-bg);
   color: var(--page-fg);
 }
@@ -256,6 +257,7 @@ body.admin.dark {
   --btn-hover: #404040;
   --overlap-bg: #554616;
   --current-bg: #1d4a22;
+  --next-bg: #1d2a4a;
 }
 
 #stale-banner,
@@ -320,6 +322,24 @@ body.admin.dark {
   font-variant-numeric: tabular-nums;
 }
 
+/* Connection indicator: green = WebSocket live (pushes), yellow =
+   disconnected and retrying — the page keeps working via the 5 s
+   polling fallback either way. */
+.conn-dot {
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+}
+
+.conn-dot.live {
+  background: var(--green);
+}
+
+.conn-dot.off {
+  background: var(--yellow);
+}
+
 table {
   border-collapse: collapse;
   /* Content-sized, not width: 100% — the field clusters stay tight at
@@ -370,10 +390,30 @@ td input[data-field="duration"] {
   width: 4.5rem;
 }
 
+/* The row's −/+ buttons already do the spinner's job (keyboard Up/Down
+   still works), and the built-in spinner strip would sit right where
+   the − button starts, breaking the zero-gap grouping. */
+td input[data-field="duration"]::-webkit-outer-spin-button,
+td input[data-field="duration"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+td input[data-field="duration"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* The row the display page is currently showing (same current-event
    rule as the display; its Remaining cell is the only one filled in) */
 tr.current td {
   background: var(--current-bg);
+}
+
+/* Nothing currently running: the next upcoming row is the one to watch
+   (the display's next-speaker bar shows the same choice). */
+tr.next td {
+  background: var(--next-bg);
 }
 
 tr.current td.remaining {

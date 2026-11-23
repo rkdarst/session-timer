@@ -6,6 +6,7 @@
   const staleBanner = document.getElementById("stale-banner");
   const errorBanner = document.getElementById("error-banner");
   const clockEl = document.getElementById("clock");
+  const connEl = document.getElementById("conn");
   const cascadeBox = document.getElementById("cascade");
   // ☰ menu: typed edits shift later events too (off by default).
   const editCascadeBox = document.getElementById("edit-cascade");
@@ -27,7 +28,13 @@
   }
   ST.setPageTitle(name, "admin");
 
-  ST.connect(name, onState);
+  ST.connect(name, onState, (live) => {
+    connEl.hidden = false;
+    connEl.className = "conn-dot " + (live ? "live" : "off");
+    connEl.title = live
+      ? "Live — updates pushed over WebSocket"
+      : "Reconnecting — changes still work via 5 s polling";
+  });
 
   // Populate state immediately over HTTP so the very first mutation
   // uses the real generation even if the WS is still connecting (the
@@ -487,18 +494,38 @@
     const now = nowDaySeconds();
     const current = ST.currentEvent(state.events, now);
     const currentId = current ? current.id : null;
+    // With nothing running (before the first event, or after the idle
+    // cutoff), the next upcoming row is the one to watch — highlighted
+    // like the display's next-speaker bar.  (ST.nextEvent skips
+    // next-day events, which never run today.)
+    let next = null;
+    if (currentId === null) next = ST.nextEvent(state.events, now);
+    const nextId = next ? next.id : null;
     for (const tr of tbody.rows) {
       const isCurrent = tr.dataset.eid === currentId;
+      const isNext = next !== null && tr.dataset.eid === nextId;
       tr.classList.toggle("current", isCurrent);
+      tr.classList.toggle("next", isNext);
       const td = tr.querySelector("td.remaining");
       if (!td) continue;
+      // Hover docs live on the cell they describe — a row-wide title
+      // would mask the inputs' own tooltips.
       if (isCurrent) {
         const end = current.start_time + current.duration;
         td.textContent = ST.fmtDuration(end - now);
         td.classList.toggle("past", end <= now);
+        td.title =
+          "Currently on the display — ends at " + ST.fmtServiceTime(end);
+      } else if (isNext) {
+        td.textContent = "";
+        td.classList.remove("past");
+        td.title =
+          "Next to run — starts at " + ST.fmtServiceTime(next.start_time) +
+          " (in " + ST.fmtDuration(next.start_time - now) + ")";
       } else {
         td.textContent = "";
         td.classList.remove("past");
+        td.title = "";
       }
     }
   }

@@ -38,13 +38,15 @@ Allows one to view the events in the session and modify them.  There are control
   checkbox is on: then a typed start/duration change shifts every later
   event by the same delta, through the same all-or-nothing cascade the
   +/− buttons use; off by default since it is rarely wanted)
-* Increase/decrease duration of event (also then delaying subsequent events, as found by start time)
+* Increase/decrease duration of event (also then delaying subsequent events, as found by start time; the duration input's built-in spinner is hidden — the −/+ buttons and the keyboard's arrow keys do that job)
 * Increase/decrease start time of event (also then delaying subsequent events), plus a "now" button setting the start to the current minute (rounded backwards: the event is already running and `HH:MM` stays clean; the same cascade rule applies)
 * Highlight overlapping events but not otherwise blocking them.
 * Show the remaining time only for the event currently being displayed
   (same current-event rule as the display page: greatest start_time <=
   now, overlaps to the most recently started) and highlight that row in
-  the table, so the current event is identifiable at a glance.
+  the table, so the current event is identifiable at a glance.  With
+  nothing currently running, the next upcoming row is highlighted
+  instead (the row the display's next-speaker bar is counting down to).
 * Show the gap between each event and the next one (as found by start
   time) in a column: blank for the last event, negative (and red) when
   events overlap.
@@ -62,6 +64,9 @@ Allows one to view the events in the session and modify them.  There are control
 * A small clock in the toolbar showing the current time in the
   session's timezone (`HH:MM:SS`, server-anchored — the clock the
   schedule runs on; the ☰ menu's timezone line names that zone).
+* A connection indicator in the toolbar: green when the WebSocket is
+  live, yellow when disconnected and retrying (the page keeps working
+  via the 5 s polling fallback).
 * A permanent warning banner at the top ("Events are NOT saved long
   term") — shown only when snapshot persistence is disabled (queried
   from `GET /api/persistence`) — and a Help button opening a concise

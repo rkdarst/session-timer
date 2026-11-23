@@ -31,9 +31,12 @@ const ST = (() => {
    * hourly /state re-fetch re-syncs the server-time skew and the
    * session's utc_offset (DST) even when no mutation happens for
    * hours.  Server-time sync (noteServerTime) is applied centrally so
-   * both pages and every payload path benefit.
+   * both pages and every payload path benefit.  onStatus (optional)
+   * is called with true whenever the WebSocket opens and false
+   * whenever it closes (e.g. while the polling fallback is active) —
+   * for connection indicators.
    */
-  function connect(name, onState) {
+  function connect(name, onState, onStatus) {
     let ws = null;
     let reconnectTimer = null;
     // Current reconnect wait; doubled on every failed attempt (see
@@ -99,6 +102,7 @@ const ST = (() => {
       }
       ws.onopen = () => {
         stopPolling();
+        onStatus?.(true);
         // Connection succeeded: the next disconnect starts the backoff
         // ladder over from the base again.
         reconnectDelayMs = CONFIG.reconnectBaseMs;
@@ -114,6 +118,7 @@ const ST = (() => {
       };
       ws.onclose = () => {
         ws = null;
+        onStatus?.(false);
         startPolling();
         scheduleReconnect();
       };

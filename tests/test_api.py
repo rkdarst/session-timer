@@ -378,9 +378,19 @@ def test_csv_upload_bad_content_400(client):
 
 
 def test_invalid_session_name_404(client):
-    assert client.get("/api/bad.name/state").status_code == 404
-    assert client.get("/api/bad.name/display").status_code == 404
-    assert client.get("/bad.name/iframe").status_code == 404
+    # Page routes answer with an EMPTY 404 (fingerprint-free); API
+    # routes may carry a JSON detail.
+    for path in (
+        "/bad.name/",
+        "/bad.name/display",
+        "/bad.name/iframe",
+        "/bad.name",
+        "/api/bad.name/state",
+    ):
+        r = client.get(path)
+        assert r.status_code == 404, path
+    for path in ("/bad.name/", "/bad.name/display", "/bad.name/iframe"):
+        assert client.get(path).content == b"", path
 
 
 def test_admin_page_no_trailing_slash_redirects(client):

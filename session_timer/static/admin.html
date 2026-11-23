@@ -61,12 +61,12 @@
 <table id="events-table">
   <thead>
     <tr>
-      <th>Name</th>
-      <th>Start</th>
-      <th>Duration (s)</th>
+      <th title="Free-form label — the next upcoming event's name is shown on the display page">Name</th>
+      <th title="Start time of day in the session timezone (HH:MM) — 'now' sets it to the current minute; hours of 24 or later are tomorrow's early hours and never run today">Start</th>
+      <th title="Length in seconds — an Event-now event's duration runs from its floored start, so it ends the full requested time from when it was created">Duration (s)</th>
       <th>End</th>
       <th title="Time between this event's end and the next event's start (negative when they overlap; blank for the last event)">Gap</th>
-      <th title="Countdown for the event currently shown on the display page (blank for all other events)">Remaining</th>
+      <th title="Countdown for the event currently shown on the display page (blank for all other events; when nothing is running, the next upcoming row is highlighted)">Remaining</th>
     </tr>
   </thead>
   <tbody></tbody>
@@ -101,6 +101,15 @@
         column; negative = overlap, not blocked). The <b>now</b> button
         sets an event's start to the current minute (same cascade
         rule) &mdash; "this talk just started".</li>
+      <li><b>Event now ▾</b> creates a talk starting at the current
+        minute &mdash; pick a preset duration (3&ndash;60 min) or
+        Custom.</li>
+      <li><b>Clocks:</b> the toolbar time and the display's small corner
+        clock both show the session's own timezone (the ☰ menu's
+        timezone line names it); toggle the display's with ⏱.</li>
+      <li><b>Embedding:</b> <code>/SESSION_NAME/iframe</code> is a bare
+        progress-bar-only view (no countdown) for embedding into other
+        pages.</li>
       <li><b>Manual edits delay later events</b> (☰ menu, off by
         default): when checked, typing a new start or duration shifts
         every later event by the same amount — for big re-timings where

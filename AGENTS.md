@@ -74,6 +74,15 @@ Phases 1–4 are implemented and verified:
   localStorage like the font size, default on; the admin preview shows
   the default look); admin page = toolbar, HH:MM:SS, always on, with
   the ☰ timezone line setting its title.
+- UI polish batch: invalid names on the page routes answer with an
+  empty 404 (check_name's JSON detail remains API-only); the duration
+  input's built-in spinner is hidden (row −/+ and arrow keys cover it);
+  a toolbar connection dot (green = WS live, yellow = polling fallback)
+  via an optional onStatus callback on ST.connect; with nothing
+  currently running the next upcoming row is highlighted (tr.next,
+  --next-bg in both themes, matching the display's next-speaker bar);
+  the Help popup covers the event-now dropdown, clocks, and the embed
+  view.
 - Mobile polish, deliberately small: the admin's events table
   scrolls horizontally in an `.table-wrap` (overflow-x: auto + table
   min-width 48rem) instead of squishing — no responsive redesign, the

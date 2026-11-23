@@ -380,10 +380,21 @@ async def root():
     return Response(status_code=404)
 
 
+def page_response(name: str, path: Path) -> Response:
+    """Serve a page file; invalid names get an EMPTY 404.
+
+    check_name's JSON "unknown session" detail would leak the framework
+    signature on browser-facing probe paths — the page routes (like the
+    "/" and catch-all handlers) stay fingerprint-free instead.  (API
+    routes keep check_name's JSON 404.)"""
+    if not config.NAME_RE.fullmatch(name):
+        return Response(status_code=404)
+    return FileResponse(path)
+
+
 @app.get("/{name}/", include_in_schema=False)
 async def admin_page(name: str):
-    check_name(name)
-    return FileResponse(STATIC_DIR / "admin.html")
+    return page_response(name, STATIC_DIR / "admin.html")
 
 
 @app.get("/{name}", include_in_schema=False)
@@ -410,16 +421,14 @@ async def admin_page_no_slash(name: str):
 
 @app.get("/{name}/display", include_in_schema=False)
 async def display_page(name: str):
-    check_name(name)
-    return FileResponse(STATIC_DIR / "display.html")
+    return page_response(name, STATIC_DIR / "display.html")
 
 
 @app.get("/{name}/iframe", include_in_schema=False)
 async def iframe_page(name: str):
     """Embeddable progress-only view: full-viewport horizontal progress
     bar and a top-band "next" bar — no countdown text, no controls."""
-    check_name(name)
-    return FileResponse(STATIC_DIR / "iframe.html")
+    return page_response(name, STATIC_DIR / "iframe.html")
 
 
 # --------------------------------------------------------------- state
