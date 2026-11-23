@@ -33,6 +33,10 @@ const CONFIG = Object.freeze({
    // empty session.
    newEventDefaultDuration: 600,
 
+  // Admin page: preset durations (minutes) offered by the "Event now"
+  // dropdown.
+  eventNowMinutes: Object.freeze([3, 5, 10, 15, 20, 30, 45, 60]),
+
   // Both pages: WebSocket reconnect backoff.  The first retry after a
   // disconnect waits reconnectBaseMs and every further failure doubles
   // the wait up to reconnectMaxMs; a successful connection resets the

@@ -31,7 +31,7 @@ There are no users.  Security is by hard-to-guess URLs.
 Allows one to view the events in the session and modify them.  There are controls to set and update combinations of start, end, duration, remaining time.  These controls will be refined later, choose something for now that makes sense.
 
 * Table-like view
-* Add event
+* Add event (chained after the final event, or at the next minute from now on an empty schedule — rounded up, so starts stay minute-aligned even when durations carry seconds)
 * Delete event
 * Set event start / end / duration / remaining times (not affecting
   other events — unless the ☰ menu's "Manual edits delay later events"
@@ -48,7 +48,7 @@ Allows one to view the events in the session and modify them.  There are control
 * Show the gap between each event and the next one (as found by start
   time) in a column: blank for the last event, negative (and red) when
   events overlap.
-* Quick "event now" setup (starting at the current minute, rounded backwards).
+* Quick "event now" setup: starts at the current minute (rounded backwards — the event is already running and `HH:MM` stays clean) with the duration extended so it ends the full requested time from *now* (seconds land only in the duration/end).  Dropdown of preset durations (3-60 min, tunable via `CONFIG.eventNowMinutes`) plus a custom option.
 * Room dimming: "darker"/"lighter" buttons that fade the display
   screens toward black (steps up to 90% black), synced to every panel
   via the session — so an admin can dim displays that are not
@@ -68,7 +68,9 @@ Allows one to view the events in the session and modify them.  There are control
   page link, QR code, CSV download/upload, a "Manual edits delay later
   events" checkbox (off by default: when on, typing a new start or
   duration shifts every later event by the same delta — the manual-edit
-  counterpart of the +/− cascade), "Set timezone to this
+  counterpart of the +/− cascade), a line showing the session's
+  current timezone and UTC offset (with a hint when the admin's
+  browser zone differs), "Set timezone to this
   browser" (forced re-set of the session timezone: HH:MM schedule
   kept, absolute times shift by the zone difference), "Show raw
   state" (the JSON as this client sees it, including `server_time` —
@@ -135,6 +137,11 @@ but a sysadmin message keeps the banner up).  It is read once at server
 start (restart to change), stripped and capped at 512 characters, and
 fetched once per page load from `GET /api/banner`; unset or empty means
 no message.  The display page is not affected.
+
+The container liveness probe is a bare `/healthz` endpoint (an empty
+200 that reveals nothing about the sessions): unlike a static-asset
+probe it exercises the real request path — middleware, routing, the
+store.
 
 Limits (see `session_timer/config.py`): session names are at most 128
 ASCII characters; event names at most 128 characters; a session holds

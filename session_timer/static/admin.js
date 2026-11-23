@@ -102,6 +102,7 @@
       ensureTimezone();
     }
     updateDimButtons();
+    updateTzIndicator();
     renderTable();
   }
 
@@ -164,6 +165,34 @@
     // null).  A fresh session is stamped with its first edit instead.
     if (state.generation === null || state.timezone != null) return;
     stampTimezone();
+  }
+
+  /** The ☰ menu's timezone line: which clock the session follows
+      (refreshed on every state receipt).  A suffix points out a
+      browser/session zone mismatch — the silent first-stamp design can
+      otherwise leave "whose clock is this?" unanswered. */
+  function updateTzIndicator() {
+    const el = document.getElementById("tz-indicator");
+    if (!el) return;
+    if (!state.timezone) {
+      el.textContent = "Timezone: not set yet";
+      return;
+    }
+    let text = state.timezone;
+    if (typeof state.utc_offset === "number") {
+      const sign = state.utc_offset < 0 ? "-" : "+";
+      const abs = Math.abs(state.utc_offset);
+      const h = Math.floor(abs / 3600);
+      const m = Math.round((abs % 3600) / 60);
+      text += " — UTC" + sign + h + (m ? ":" + String(m).padStart(2, "0") : "");
+    } else {
+      text += " (offset unknown)";
+    }
+    const browserTz = browserTimezone();
+    if (browserTz && browserTz !== state.timezone) {
+      text += " — this browser: " + browserTz;
+    }
+    el.textContent = text;
   }
 
   /** Now of day in the session timezone (server time + utc_offset,
@@ -731,6 +760,7 @@
       stateModal.hidden = true;
       const menu = document.getElementById("menu");
       if (menu) menu.hidden = true;
+      if (eventNowMenu) eventNowMenu.hidden = true;
     }
   });
 
@@ -739,21 +769,50 @@
   document.getElementById("add-event").addEventListener("click", () => {
     guard(async () => {
       // Default: chained after the final event (same duration), so a
-      // run of events just extends the schedule.  With no events yet,
-      // start at the current time of day (rounded down to the minute)
-      // for CONFIG.newEventDefaultDuration.  Times are wall-clock
-      // seconds of day in the session timezone.  Note: chaining past
-      // midnight is rejected by the server (400) — the last event's
-      // end must stay within the day for the next start.
+      // run of events just extends the schedule; with no events yet,
+      // start at the next minute from now for
+      // CONFIG.newEventDefaultDuration.  Starts are rounded UP to the
+      // minute in both cases — "Event now" durations can carry seconds
+      // (a full N minutes from *now*), and rounding up keeps every
+      // start HH:MM-aligned anyway.  Times are wall-clock seconds of
+      // day in the session timezone.  Note: a start past the two-day
+      // window (48:00:00) is rejected by the server (400).
       const events = sortedEvents();
       const last = events.length > 0 ? events[events.length - 1] : null;
-      const start = last ? last.start_time + last.duration : Math.floor(nowDaySeconds() / 60) * 60;
+      const reference = last ? last.start_time + last.duration : nowDaySeconds();
+      const start = Math.ceil(reference / 60) * 60;
       const duration = last ? last.duration : CONFIG.newEventDefaultDuration;
       await mutate("/events", "POST", { name: "", start_time: start, duration: duration });
     });
   });
 
-  document.getElementById("event-now").addEventListener("click", () => {
+  // "Event now" dropdown: preset durations (CONFIG.eventNowMinutes) as
+  // one-click items, plus "Custom…" keeping the free-form prompt for
+  // odd durations.  The menu pattern mirrors the ☰ menu above: toggle
+  // on the button, close on item click / outside click / Escape.
+  const eventNowBtn = document.getElementById("event-now");
+  const eventNowMenu = document.getElementById("event-now-menu");
+  const eventNowDropdown = eventNowBtn.parentElement;
+
+  function eventNowCreate(durationSeconds) {
+    guard(() =>
+      mutate("/events/now", "POST", { name: "", duration: durationSeconds })
+    );
+  }
+
+  for (const minutes of CONFIG.eventNowMinutes) {
+    const item = document.createElement("button");
+    item.textContent = minutes + " min";
+    item.addEventListener("click", () => {
+      eventNowMenu.hidden = true;
+      eventNowCreate(minutes * 60);
+    });
+    eventNowMenu.appendChild(item);
+  }
+  const customItem = document.createElement("button");
+  customItem.textContent = "Custom…";
+  customItem.addEventListener("click", () => {
+    eventNowMenu.hidden = true;
     const minutes = window.prompt("Event duration in minutes:", "10");
     if (minutes === null) return;
     const duration = Math.round(parseFloat(minutes) * 60);
@@ -761,7 +820,17 @@
       error("Duration must be positive");
       return;
     }
-    guard(() => mutate("/events/now", "POST", { name: "", duration: duration }));
+    eventNowCreate(duration);
+  });
+  eventNowMenu.appendChild(customItem);
+
+  eventNowBtn.addEventListener("click", () => {
+    eventNowMenu.hidden = !eventNowMenu.hidden;
+  });
+  document.addEventListener("click", (event) => {
+    if (!eventNowMenu.hidden && !eventNowDropdown.contains(event.target)) {
+      eventNowMenu.hidden = true;
+    }
   });
 
   document.getElementById("download-csv").addEventListener("click", () => {

@@ -277,6 +277,10 @@ def test_event_now_creates_event_starting_now(client):
     # (UTC here): the current minute, rounded backwards so the event is
     # already running and the HH:MM column stays clean.
     assert event["start_time"] % 60 == 0
+    # ...and the duration is extended so the event ends a full 600 s
+    # from the exact request time: the seconds squeezed out of the
+    # floored start are added to the duration.
+    assert 600 <= event["duration"] < 601 + 60
     now_utc = time.gmtime()
     day_seconds = now_utc.tm_hour * 3600 + now_utc.tm_min * 60 + now_utc.tm_sec
     # ~now, with slack for a minute boundary crossed between the two
@@ -285,6 +289,12 @@ def test_event_now_creates_event_starting_now(client):
     assert abs(event["start_time"] - day_seconds) < 120 or abs(
         event["start_time"] - day_seconds
     ) > 86280  # midnight wrap between the two reads
+    # End = start + duration ≈ now + 600: immune to minute-boundary
+    # crossings (both sides shift equally); a midnight wrap between the
+    # reads shows up as a huge difference.
+    end = event["start_time"] + event["duration"]
+    diff = abs(end - (day_seconds + 600))
+    assert diff < 120 or diff > 86280
 
 
 def test_event_now_without_timezone_400(client):
@@ -399,6 +409,8 @@ def test_pages_served(client):
         (f"/{NAME}/", "menu-btn"),
         (f"/{NAME}/", "set-timezone"),
         (f"/{NAME}/", "edit-cascade"),
+        (f"/{NAME}/", "tz-indicator"),
+        (f"/{NAME}/", "event-now-menu"),
         (f"/{NAME}/", ">Speaker view</a>"),  # toolbar link (was menu item)
         (f"/{NAME}/", "config.js"),
         (f"/{NAME}/display", 'id="timer"'),
@@ -648,6 +660,17 @@ def test_security_headers_added_but_no_frame_restrictions(client):
     assert "server" not in r.headers
 
 
+def test_healthz(client):
+    """Liveness probe: 200 with an empty body (fingerprint-free), after
+    exercising the real request path and the store.  Both slash forms
+    answer identically (the slash form would otherwise hit the admin
+    page route and serve an interface for a session named "healthz")."""
+    for path in ("/healthz", "/healthz/"):
+        r = client.get(path)
+        assert r.status_code == 200, path
+        assert r.content == b"", path
+
+
 def test_root_and_unknown_paths_are_empty_404s(client):
     """/ and every unmatched path answer with an empty 404: no JSON
     framework signature, nothing that hints at what is hosted here.
@@ -656,7 +679,17 @@ def test_root_and_unknown_paths_are_empty_404s(client):
     301-redirect to their slash form, uniformly, so the redirect itself
     reveals nothing about session existence — see
     test_admin_page_no_trailing_slash_redirects.)"""
-    for path in ("/", "/no.such.page", "/x/y/z", "/favicon.ico"):
+    for path in (
+        "/",
+        "/no.such.page",
+        "/x/y/z",
+        "/favicon.ico",
+        # The OpenAPI schema is disabled (openapi_url=None) and the dot
+        # makes it an invalid session name: empty 404, no leak.  ("/docs"
+        # would NOT qualify — with docs disabled it is an ordinary valid
+        # name and 301-redirects like every other one-segment path.)
+        "/openapi.json",
+    ):
         r = client.get(path)
         assert r.status_code == 404, path
         assert r.content == b"", path

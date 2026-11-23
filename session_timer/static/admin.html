@@ -23,7 +23,10 @@
 
 <div class="toolbar">
   <button id="add-event">Add event</button>
-  <button id="event-now">Event now</button>
+  <div class="dropdown">
+    <button id="event-now" title="Create an event starting at the current minute">Event now ▾</button>
+    <div id="event-now-menu" class="dropdown-menu" hidden></div>
+  </div>
   <label>
     <input type="checkbox" id="cascade" checked>
     +/- delays later events
@@ -45,6 +48,7 @@
         <input type="checkbox" id="edit-cascade">
         Manual edits delay later events
       </label>
+      <div id="tz-indicator" class="menu-info"></div>
       <button id="set-timezone" title="Make the session follow this browser's timezone: the HH:MM schedule stays, absolute times shift">Set timezone to this browser</button>
       <button id="show-state" title="Show the raw JSON state as this client sees it">Show raw state</button>
       <button id="toggle-theme" title="Toggle dark mode (this screen only)">Dark mode: off</button>

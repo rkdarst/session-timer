@@ -38,10 +38,12 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8000
 
-# Liveness probe.  GETs never create a session (creation is lazy, on
-# mutation), so fetching a static asset is a safe check.
+# Liveness probe against the dynamic /healthz endpoint: exercises the
+# real request path (middleware, routing, the store) rather than a
+# static file.  GETs never create a session (creation is lazy, on
+# mutation), so probing is safe.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/static/common.js', timeout=4)"]
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4)"]
 
 # Single worker on purpose (see header comment).  TLS is expected to be
 # terminated by a reverse proxy in front of the container.

@@ -107,7 +107,16 @@ async def _save_snapshot() -> None:
             logger.error("failed to write snapshot %s: %s", _snapshot_path, exc)
 
 
-app = FastAPI(title="session-timer", lifespan=lifespan, docs_url=None, redoc_url=None)
+# docs/redoc/openapi all disabled: the schema names every route and
+# model, and a guessable path must stay as clueless as the empty-404
+# catch-all (all three then fall through to it).
+app = FastAPI(
+    title="session-timer",
+    lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -342,6 +351,24 @@ async def banner_message():
     return {"message": config.ADMIN_MESSAGE or ""}
 
 
+@app.get("/healthz", include_in_schema=False)
+@app.get("/healthz/", include_in_schema=False)
+async def healthz():
+    """Liveness probe for the Docker HEALTHCHECK and external monitors.
+
+    Deliberately bare — an empty 200, as clueless as every other
+    fingerprint-free response — but unlike a static-asset probe it
+    exercises the real request path (middleware, routing, the event
+    loop) and touches the in-memory store.  Reveals nothing about the
+    sessions: a guessable path must stay uninformative.  Both slash
+    forms answer identically (the slash form would otherwise fall
+    through to the admin-page route and serve an interface for a
+    hypothetical session named "healthz").
+    """
+    _ = len(store.sessions)
+    return Response(status_code=200)
+
+
 @app.get("/", include_in_schema=False)
 async def root():
     """Empty 404: the root path gives no clue anything is hosted here.
@@ -565,16 +592,22 @@ async def add_event(name: str, body: EventIn, x_generation: Annotated[int, Heade
 async def event_now(
     name: str, body: EventNowIn, x_generation: Annotated[int, Header()]
 ):
-    """Quick "event now": create an event starting at the current
-    minute, rounded backwards — the event is already running and the
-    HH:MM column (and CSV) stays free of second-level times."""
-    session, _ = run_mutation(
-        name,
-        x_generation,
-        lambda s: s.add_event(
-            body.name, (day_seconds_now(s) // 60) * 60, body.duration
-        ),
-    )
+    """Quick "event now": create an event whose start is the current
+    minute, rounded backwards (the event is already running and the
+    HH:MM column stays clean), with the duration extended so it ends a
+    full ``body.duration`` from the exact current second — the speaker
+    gets the whole time; only the duration/end carry seconds."""
+    def mutate(s):
+        now = day_seconds_now(s)
+        start = (now // 60) * 60
+        # The end is a full `duration` from *now*, not from the floored
+        # start: the floor seconds are added to the duration, so the
+        # speaker loses nothing.  (A 24 h request can therefore exceed
+        # the duration cap by up to 59 s and is rejected by add_event's
+        # check — clear error, no silent clamp.)
+        return s.add_event(body.name, start, body.duration + (now % 60))
+
+    session, _ = run_mutation(name, x_generation, mutate)
     return await broadcast_state(name, session)
 
 

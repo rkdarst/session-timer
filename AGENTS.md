@@ -45,7 +45,10 @@ Phases 1–4 are implemented and verified:
   running; HH:MM stays clean) — and shifts later events by the same
   delta per the toolbar cascade checkbox; delta 0 sends nothing.
   Toolbar "Event now" also floors to the current minute now (was
-  exact seconds).
+  exact seconds) and extends the duration so the event ends the full
+  requested time from *now* (seconds land only in duration/end).
+  "Add event" rounds its start UP to the next minute (chained end, or
+  now on an empty session), keeping every start minute-aligned.
 - First-visit timezone fix: the stamp now rides along with the first
   edit (mutate() awaits a stamp when the session has no timezone yet —
   its response carries the bumped generation the mutation then uses),
@@ -55,6 +58,15 @@ Phases 1–4 are implemented and verified:
   is not set" until a reload.  Merely opening pages still creates
   nothing (DESIGN.md's "opening the admin page stamps …" wording
   corrected to first-edit).
+- ☰ menu timezone indicator (which zone the session follows, with UTC
+  offset and a hint when the admin's browser zone differs); "Event
+  now" is a dropdown of preset durations (`CONFIG.eventNowMinutes`,
+  3-60 min) plus a custom prompt; bare `/healthz` liveness endpoint
+  (empty 200, touches the real request path + store) — the Dockerfile
+  HEALTHCHECK and the CI smoke test now probe it.  Both slash forms
+  (`/healthz`, `/healthz/`) answer it; the OpenAPI schema is disabled
+  (`openapi_url=None`), so `/docs` and `/openapi.json` fall through to
+  the empty-404 catch-all like every other unknown path.
 - Sysadmin banner: `SESSION_TIMER_MESSAGE` (server environment, read
   once at startup, stripped and capped at 512 chars) is served by
   `GET /api/banner` and shown by admin.js inside the yellow warning

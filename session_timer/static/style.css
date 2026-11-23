@@ -423,6 +423,16 @@ td.gap.negative {
   cursor: pointer;
 }
 
+/* A menu info line (e.g. the timezone indicator): muted, not
+   interactive — not a button/a, so it never auto-closes the menu. */
+.dropdown-menu .menu-info {
+  font-size: 0.875rem;
+  padding: 0.25rem 0.75rem;
+  white-space: nowrap;
+  opacity: 0.75;
+  cursor: default;
+}
+
 #display-link {
   display: inline-block;
   text-decoration: none;

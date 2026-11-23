@@ -76,7 +76,7 @@ jobs:
         run: |
           docker run -d --rm --name smoke -p 127.0.0.1:8000:8000 session-timer:latest
           for i in $(seq 1 30); do
-            if curl -fsS -o /dev/null http://127.0.0.1:8000/static/common.js; then
+            if curl -fsS -o /dev/null http://127.0.0.1:8000/healthz; then
               echo "smoke test ok"
               docker rm -f smoke >/dev/null
               exit 0
