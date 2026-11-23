@@ -31,7 +31,12 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fastapi.responses import FileResponse, PlainTextResponse, Response
+from fastapi.responses import (
+    FileResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -354,10 +359,40 @@ async def admin_page(name: str):
     return FileResponse(STATIC_DIR / "admin.html")
 
 
+@app.get("/{name}", include_in_schema=False)
+async def admin_page_no_slash(name: str):
+    """Redirect the missing-trailing-slash form of the admin URL.
+
+    The catch-all at the end of the route table would otherwise answer
+    with a bare 404 (it matches before Starlette's automatic
+    slash-redirect can fire).  An origin-form Location keeps the
+    redirect scheme-agnostic — Starlette's automatic 307 bakes the
+    request scheme into an absolute URL, which is wrong behind the
+    TLS-terminating proxy this deployment assumes — and 301 marks the
+    slash form canonical.  Invalid names (dots, etc.) get the same
+    empty 404 as the catch-all — probing must reveal nothing — and the
+    redirect is uniform for every valid name, so it reveals nothing
+    about session existence either.
+    """
+    if not config.NAME_RE.fullmatch(name):
+        # Empty 404 (not check_name's JSON exception): stay
+        # fingerprint-free, like the "/" and catch-all handlers.
+        return Response(status_code=404)
+    return RedirectResponse(f"/{name}/", status_code=301)
+
+
 @app.get("/{name}/display", include_in_schema=False)
 async def display_page(name: str):
     check_name(name)
     return FileResponse(STATIC_DIR / "display.html")
+
+
+@app.get("/{name}/iframe", include_in_schema=False)
+async def iframe_page(name: str):
+    """Embeddable progress-only view: full-viewport horizontal progress
+    bar and a top-band "next" bar — no countdown text, no controls."""
+    check_name(name)
+    return FileResponse(STATIC_DIR / "iframe.html")
 
 
 # --------------------------------------------------------------- state

@@ -365,6 +365,20 @@ def test_csv_upload_bad_content_400(client):
 def test_invalid_session_name_404(client):
     assert client.get("/api/bad.name/state").status_code == 404
     assert client.get("/api/bad.name/display").status_code == 404
+    assert client.get("/bad.name/iframe").status_code == 404
+
+
+def test_admin_page_no_trailing_slash_redirects(client):
+    r = client.get(f"/{NAME}", follow_redirects=False)
+    assert r.status_code == 301
+    # origin-form Location: scheme-agnostic (proxy-safe) redirect
+    assert r.headers["location"] == f"/{NAME}/"
+    # invalid names 404 instead of redirecting
+    assert client.get("/bad.name", follow_redirects=False).status_code == 404
+    # following the redirect lands on the admin page
+    followed = client.get(f"/{NAME}")
+    assert followed.status_code == 200
+    assert "events-table" in followed.text
 
 
 def test_pages_served(client):
@@ -384,6 +398,9 @@ def test_pages_served(client):
         (f"/{NAME}/", "config.js"),
         (f"/{NAME}/display", 'id="timer"'),
         (f"/{NAME}/display", "config.js"),
+        (f"/{NAME}/iframe", 'id="bar"'),
+        (f"/{NAME}/iframe", "next-bar"),
+        (f"/{NAME}/iframe", "iframe.js"),
     ]:
         resp = client.get(path)
         assert resp.status_code == 200
@@ -629,8 +646,12 @@ def test_security_headers_added_but_no_frame_restrictions(client):
 def test_root_and_unknown_paths_are_empty_404s(client):
     """/ and every unmatched path answer with an empty 404: no JSON
     framework signature, nothing that hints at what is hosted here.
-    Security is URL secrecy — probing the site must reveal nothing."""
-    for path in ("/", "/no-such-page", "/x/y/z", "/favicon.ico"):
+    Security is URL secrecy — probing the site must reveal nothing.
+    (Single-segment valid-name paths are the one exception: they
+    301-redirect to their slash form, uniformly, so the redirect itself
+    reveals nothing about session existence — see
+    test_admin_page_no_trailing_slash_redirects.)"""
+    for path in ("/", "/no.such.page", "/x/y/z", "/favicon.ico"):
         r = client.get(path)
         assert r.status_code == 404, path
         assert r.content == b"", path

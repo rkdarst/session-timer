@@ -87,6 +87,15 @@ Phases 1–4 are implemented and verified:
   compute now-of-day via `ST.dayNow(utc_offset)` (server-time skew
   correction in `ST.noteServerTime`/`ST.serverNow`, hourly `/state`
   re-sync)
+- Embeddable progress-only view (`GET /{name}/iframe` → static
+  `iframe.html` + `iframe.js`): the display's progress bar as a
+  full-viewport horizontal fill (green/yellow/red, expiry flash) plus
+  the "next speaker" bar as a top-20%-band fill (when the display
+  would show it) — no countdown text, no controls; reuses the
+  display's element ids/CSS (`body.iframe` sets `--bar-height:
+  100vh`), includes the synced dim overlay; same WS plumbing via
+  `ST.connect`; render policy duplicated from display.js with a
+  keep-in-sync comment (no JS test harness).
 
 Run it:
 
@@ -111,6 +120,7 @@ speaker-timer/               # (repo folder name; package is session_timer)
 │   └── static/
 │       ├── admin.html + admin.js     # admin UI (static, no templating)
 │       ├── display.html + display.js # display UI (static, no templating)
+│       ├── iframe.html + iframe.js   # embeddable progress-only view (/{name}/iframe)
 │       ├── config.js                 # client-side tunables (global CONFIG, frozen)
 │       ├── common.js                 # shared websocket + render helpers
 │       ├── qrcode.js                 # vendored qrcode-generator 1.4.4 (MIT)
@@ -157,7 +167,10 @@ render time.
 
 Routes (all JSON where applicable):
 
-- `GET /{name}/` → admin HTML page
+- `GET /{name}/` → admin HTML page (`/{name}` without the slash
+  301-redirects here, with an origin-form Location so it stays
+  scheme-agnostic behind the TLS proxy; the fingerprint-free catch-all
+  would otherwise bare-404 it)
 - `GET /{name}/display` → display HTML page
 - `GET /api/{name}/state` → current `{generation, events}`
 

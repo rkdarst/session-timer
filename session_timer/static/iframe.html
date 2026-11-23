@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<title>Session timer progress</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="iframe">
+<!-- Deliberately reuses the display page's element ids so all bar CSS
+     (track, colors, expiry flash) applies unchanged; the iframe-specific
+     geometry lives in the body.iframe rules in style.css.  #next-wrap
+     comes after #bar-wrap so the next bar paints over the full-screen
+     progress track.  No countdown text, no controls (see iframe.js). -->
+<div id="bar-wrap"><div id="bar"></div></div>
+<div id="next-wrap" hidden>
+  <div id="next-bar"></div>
+</div>
+<div id="dim-overlay"></div>
+<script src="/static/config.js"></script>
+<script src="/static/common.js"></script>
+<script src="/static/iframe.js"></script>
+</body>
+</html>

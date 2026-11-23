@@ -155,6 +155,22 @@ body.display {
    session; see display.js).  Sits above the countdown and bars but
    below the control buttons (z-index 10), so a human standing at a
    dimmed display can always reach "lighter". */
+/* Embedded progress-only view (/{name}/iframe): the display's bar
+   markup with different geometry — the horizontal progress track fills
+   the whole viewport (--bar-height: 100vh) and the "next speaker" bar
+   overlays the top 20% (no countdown text, no controls; see iframe.js). */
+body.iframe {
+  --bar-height: 100vh;
+  background: #000;
+  color: #fff;
+}
+
+body.iframe #next-wrap {
+  top: 0;
+  bottom: auto;
+  height: 20vh;
+}
+
 #dim-overlay {
   position: fixed;
   inset: 0;
