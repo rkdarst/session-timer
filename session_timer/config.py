@@ -50,3 +50,10 @@ DEFAULT_TZ = os.environ.get("SESSION_TIMER_TZ") or None
 # ------------------------------------- local server (console script)
 HOST = "127.0.0.1"
 PORT = 8000
+
+# --------------------------------------- admin page banner message
+# Optional sysadmin message (SESSION_TIMER_MESSAGE) shown as a yellow
+# bar at the top of the admin page.  Read once at import: changing it
+# requires a server restart.  Stripped and capped (a runaway value
+# would wreck the page layout); unset/empty -> None.
+ADMIN_MESSAGE = (os.environ.get("SESSION_TIMER_MESSAGE") or "").strip()[:512] or None

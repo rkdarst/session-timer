@@ -9,7 +9,9 @@ Set ``SESSION_TIMER_DATA_DIR`` to persist sessions across restarts via
 periodic snapshots (see ``config.py``); unset = memory-only.  Set
 ``SESSION_TIMER_TZ`` to an IANA zone name to give sessions created
 without an explicit timezone a default (clients fall back to their own
-local clocks when nothing is resolvable).
+local clocks when nothing is resolvable).  Set ``SESSION_TIMER_MESSAGE``
+to show a yellow sysadmin message at the top of the admin page (read
+once at startup; empty/unset = no bar).
 """
 
 from __future__ import annotations
@@ -321,6 +323,18 @@ class DimIn(BaseModel):
 async def persistence_info():
     """Whether snapshot persistence is enabled (drives the admin warning)."""
     return {"persisted": bool(config.DATA_DIR)}
+
+
+@app.get("/api/banner")
+async def banner_message():
+    """Sysadmin message (SESSION_TIMER_MESSAGE) shown on the admin page.
+
+    Static per deployment: the text is read from the environment at
+    import (``config.ADMIN_MESSAGE``, stripped and capped at 512
+    characters); the empty string means "no message" and admin.js keeps
+    the bar hidden.  Read at request time so tests can monkeypatch it.
+    """
+    return {"message": config.ADMIN_MESSAGE or ""}
 
 
 @app.get("/", include_in_schema=False)

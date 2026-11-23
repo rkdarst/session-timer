@@ -117,6 +117,15 @@ or corrupt snapshot is ignored (saved aside as `*.corrupt`) and the
 server starts empty.  With the variable unset (the default), nothing is
 ever written to disk.
 
+The admin page can show a deployment-wide **sysadmin message**: the
+`SESSION_TIMER_MESSAGE` environment variable is rendered inside the
+yellow warning banner on every admin page, above the data-loss warning
+text (when snapshot persistence is enabled the data-loss text hides,
+but a sysadmin message keeps the banner up).  It is read once at server
+start (restart to change), stripped and capped at 512 characters, and
+fetched once per page load from `GET /api/banner`; unset or empty means
+no message.  The display page is not affected.
+
 Limits (see `session_timer/config.py`): session names are at most 128
 ASCII characters; event names at most 128 characters; a session holds
 at most 128 events (larger adds/CSV uploads are rejected); at most 1024

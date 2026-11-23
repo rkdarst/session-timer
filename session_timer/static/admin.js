@@ -563,19 +563,52 @@
 
   // ---------------------------------------------- data-loss warning
 
-  // The "Events are NOT saved long term" banner only applies when the
+  // The "Events are NOT saved long term" text only applies when the
   // operator has not enabled snapshot persistence (SESSION_TIMER_DATA_DIR);
-  // hide it when they did.  Shown by default, so a failed check fails
-  // toward the safe (visible warning) side.
+  // hide the text when they did.  Shown by default, so a failed check
+  // fails toward the safe (visible warning) side.  The banner box
+  // itself stays up while the sysadmin message (below) is visible.
+  const warnBanner = document.getElementById("warn-banner");
+  const sysadminMessage = document.getElementById("sysadmin-message");
+  const dataLossWarning = document.getElementById("data-loss-warning");
+
+  /** The yellow banner holds two optional texts: hide the whole box
+      only when both are absent (otherwise it would render as an empty
+      yellow rectangle of just padding). */
+  function updateWarnBanner() {
+    warnBanner.hidden = sysadminMessage.hidden && dataLossWarning.hidden;
+  }
+
   fetch("/api/persistence")
     .then((r) => r.json())
     .then((cfg) => {
       if (cfg && cfg.persisted) {
-        document.getElementById("warn-banner").hidden = true;
+        dataLossWarning.hidden = true;
+        updateWarnBanner();
       }
     })
     .catch(() => {
       /* keep the warning visible */
+    });
+
+  // ---------------------------------------------- sysadmin message
+
+  // SESSION_TIMER_MESSAGE (server environment): shown at the top of
+  // the yellow banner, above the data-loss warning.  Static per
+  // deployment (the server reads it at startup), so one fetch on load
+  // is enough; a failed fetch just leaves the message hidden.
+  fetch("/api/banner")
+    .then((r) => r.json())
+    .then((cfg) => {
+      const msg = cfg && typeof cfg.message === "string" ? cfg.message : "";
+      if (msg) {
+        sysadminMessage.textContent = msg; // never innerHTML: no injection path
+        sysadminMessage.hidden = false;
+        updateWarnBanner();
+      }
+    })
+    .catch(() => {
+      /* no message available; stay hidden */
     });
 
   // ------------------------------------------------- help popup

@@ -346,6 +346,8 @@ def test_pages_served(client):
         (f"/{NAME}/", ">Gap</th>"),
         (f"/{NAME}/", "toggle-theme"),
         (f"/{NAME}/", "Events are NOT saved long term"),
+        (f"/{NAME}/", "sysadmin-message"),
+        (f"/{NAME}/", "data-loss-warning"),
         (f"/{NAME}/", "show-help"),
         (f"/{NAME}/", "menu-btn"),
         (f"/{NAME}/", "set-timezone"),
@@ -357,6 +359,13 @@ def test_pages_served(client):
         resp = client.get(path)
         assert resp.status_code == 200
         assert marker in resp.text
+
+    # The sysadmin message (SESSION_TIMER_MESSAGE) sits inside the
+    # warning banner, above the data-loss text.
+    admin_html = client.get(f"/{NAME}/").text
+    assert admin_html.index("sysadmin-message") < admin_html.index(
+        "Events are NOT saved"
+    )
 
 
 def test_timezone_reset_force(client):
@@ -399,6 +408,21 @@ def test_persistence_endpoint(client, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", "/tmp/session-timer-data")
     r = client.get("/api/persistence")
     assert r.json() == {"persisted": True}
+
+
+def test_banner_endpoint(client, monkeypatch):
+    from session_timer import config
+
+    # Unset (or empty) -> empty string; admin.js keeps the bar hidden.
+    r = client.get("/api/banner")
+    assert r.status_code == 200
+    assert r.json() == {"message": config.ADMIN_MESSAGE or ""}
+
+    # When the operator sets SESSION_TIMER_MESSAGE (here: patched after
+    # import, which the route reads at request time), the text is served
+    # and admin.js shows it in the sysadmin banner.
+    monkeypatch.setattr(config, "ADMIN_MESSAGE", "Maintenance tonight")
+    assert client.get("/api/banner").json() == {"message": "Maintenance tonight"}
 
 
 def test_websocket_initial_state_and_push(client):

@@ -9,8 +9,11 @@
 </head>
 <body class="admin">
 <div id="warn-banner">
-  Events are NOT saved long term &mdash; they live in server memory and are
-  lost on restart. Download a CSV to keep a copy (see Help).
+  <div id="sysadmin-message" hidden></div>
+  <div id="data-loss-warning">
+    Events are NOT saved long term &mdash; they live in server memory and are
+    lost on restart. Download a CSV to keep a copy (see Help).
+  </div>
 </div>
 <div id="stale-banner" hidden>
   State changed by someone else &mdash; your view is outdated.

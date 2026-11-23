@@ -217,7 +217,10 @@ body.admin.dark {
   border-radius: 4px;
 }
 
-/* Permanent data-loss warning at the top of the admin page */
+/* Yellow warning banner at the top of the admin page.  NOTE: no
+   white-space: pre-line here — it would preserve the newline after the
+   opening <div> tag in the HTML source and render a blank first line
+   inside the box. */
 #warn-banner {
   padding: 0.5rem 0.75rem;
   margin-bottom: 0.75rem;
@@ -225,6 +228,16 @@ body.admin.dark {
   color: #000;
   border-radius: 4px;
   font-size: 0.9rem;
+}
+
+/* Sysadmin message (SESSION_TIMER_MESSAGE), shown inside the banner
+   above the data-loss text.  Its content is set from JS textContent
+   (no HTML-source whitespace), so pre-line is safe here: a multi-line
+   env value renders as separate lines.  Hidden (display:none) ignores
+   the margin, so the spacing only applies while visible. */
+#sysadmin-message {
+  white-space: pre-line;
+  margin-bottom: 0.25rem;
 }
 
 #stale-banner {

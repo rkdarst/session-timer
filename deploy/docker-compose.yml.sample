@@ -104,3 +104,12 @@ services:
     #   - SESSION_TIMER_DATA_DIR=/data
     # volumes:
     #   - ./session-timer-data:/data
+    #
+    # OPTIONAL: show a sysadmin message inside the admin page's yellow
+    # warning banner, above the data-loss text (read once at server
+    # start — restart to change; unset/empty = no message).  If you
+    # also enabled persistence above, merge the two examples into a
+    # single environment: block.
+    #
+    # environment:
+    #   - SESSION_TIMER_MESSAGE=Planned maintenance tonight 20:00

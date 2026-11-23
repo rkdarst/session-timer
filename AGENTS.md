@@ -31,6 +31,14 @@ Phases 1–4 are implemented and verified:
   dark-mode toggle) live behind a ☰ hamburger menu that auto-closes;
   a permanent "Events are NOT saved long term" banner sits at the top
   and a Help button opens a concise popup
+- Sysadmin banner: `SESSION_TIMER_MESSAGE` (server environment, read
+  once at startup, stripped and capped at 512 chars) is served by
+  `GET /api/banner` and shown by admin.js inside the yellow warning
+  banner on the admin page, above the data-loss text (textContent
+  only; hidden when unset; enabling persistence hides only the
+  data-loss text — a sysadmin message keeps the banner up, and the box
+  vanishes only when both texts are absent; display page unaffected;
+  not dynamically updateable — restart to change).  Tests: 109 passing.
 - Verified live with uvicorn: pages 200, 409 on stale generation, CSV
   round-trip, WebSocket initial state + push + ping/pong
 - Audit fixes (post-timezone-redesign): mutations validate the
