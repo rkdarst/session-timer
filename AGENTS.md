@@ -74,6 +74,14 @@ Phases 1–4 are implemented and verified:
   localStorage like the font size, default on; the admin preview shows
   the default look); admin page = toolbar, HH:MM:SS, always on, with
   the ☰ timezone line setting its title.
+- Mobile polish, deliberately small: the admin's events table
+  scrolls horizontally in an `.table-wrap` (overflow-x: auto + table
+  min-width 48rem) instead of squishing — no responsive redesign, the
+  admin stays a desktop tool (the QR code points phones at the display
+  page, which was already viewport-scaled); on touch devices the
+  display controls are visible without hover (`hover: none` media
+  query) and get bigger tap targets (`pointer: coarse`); dead
+  `input[type="datetime-local"]` CSS removed from the media query.
 - Sysadmin banner: `SESSION_TIMER_MESSAGE` (server environment, read
   once at startup, stripped and capped at 512 chars) is served by
   `GET /api/banner` and shown by admin.js inside the yellow warning

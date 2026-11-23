@@ -168,6 +168,22 @@ body.display #clock {
   display: none;
 }
 
+/* Touch screens have no hover, so the faint-until-hover pattern would
+   leave the controls nearly invisible; and thumbs need bigger targets
+   than mice do.  (The display page is a first-class phone client —
+   that is what the QR code is for.) */
+@media (hover: none) {
+  #display-controls {
+    opacity: 0.85;
+  }
+}
+
+@media (pointer: coarse) {
+  #display-controls button {
+    padding: 0.4rem 0.9rem;
+  }
+}
+
 /* Room-dimming overlay on the display page (level synced via the
    session; see display.js).  Sits above the countdown and bars but
    below the control buttons (z-index 10), so a human standing at a
@@ -306,7 +322,21 @@ body.admin.dark {
 
 table {
   border-collapse: collapse;
-  width: 100%;
+  /* Content-sized, not width: 100% — the field clusters stay tight at
+     every page width; .table-wrap's 48rem min-width still governs
+     narrow screens (horizontal scroll inside the wrapper). */
+}
+
+/* Phone-friendly: the events table cannot fit a narrow screen, so it
+   scrolls horizontally inside its wrapper instead of squishing into
+   unusability.  (The admin is a desktop tool by design; the QR code
+   points phones at the display page.) */
+.table-wrap {
+  overflow-x: auto;
+}
+
+.table-wrap table {
+  min-width: 48rem;
 }
 
 th,
@@ -324,12 +354,20 @@ tr.overlap td {
 }
 
 td input {
-  width: 100%;
-  min-width: 5rem;
+  margin: 0; /* UA default margins would break the zero-gap grouping */
 }
 
-input[data-field="start_time"] {
-  min-width: 11rem;
+/* Column sizing: the name input fills its (flexible) column and
+   absorbs table-width changes; start/duration are compact fixed
+   widths.  CSS width is used instead of the size attribute because
+   size is ignored for type="number" and overridden by any CSS width. */
+td input[data-field="name"] {
+  width: 100%;
+}
+
+td input[data-field="start_time"],
+td input[data-field="duration"] {
+  width: 4.5rem;
 }
 
 /* The row the display page is currently showing (same current-event
@@ -352,8 +390,21 @@ td.gap.negative {
   color: var(--red);
 }
 
-.step-buttons button {
+/* Each editable field and its −/+/now buttons share ONE cell (see
+   makeInput in admin.js — the cell is td.cell-<field>), so the cluster
+   cannot drift apart when the table distributes surplus width: the
+   parts touch with zero gap (inputs and buttons have margin: 0), and
+   the cell's right padding is the clear breath before the next
+   column. */
+td.cell-start_time,
+td.cell-duration {
+  padding-right: 0.75rem;
+}
+
+td.cell-start_time button,
+td.cell-duration button {
   min-width: 2rem;
+  margin: 0;
 }
 
 /* Speaker-view link in the toolbar, styled like a button (it sits among
@@ -559,9 +610,5 @@ td.gap.negative {
 
   table {
     font-size: 0.85rem;
-  }
-
-  input[type="datetime-local"] {
-    min-width: 8rem;
   }
 }

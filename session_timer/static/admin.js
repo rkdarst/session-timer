@@ -274,10 +274,10 @@
       if (overlaps.has(ev.id)) tr.classList.add("overlap");
 
       tr.appendChild(makeInput(ev, "name", ev.name, "text"));
-      tr.appendChild(makeInput(ev, "start_time", ST.fmtServiceTime(ev.start_time), "text"));
-      tr.appendChild(makeStepButtons(ev, "start_time", 60));
-      tr.appendChild(makeInput(ev, "duration", String(ev.duration), "number"));
-      tr.appendChild(makeStepButtons(ev, "duration", 60));
+      tr.appendChild(
+        makeInput(ev, "start_time", ST.fmtServiceTime(ev.start_time), "text", 60)
+      );
+      tr.appendChild(makeInput(ev, "duration", String(ev.duration), "number", 60));
       tr.appendChild(makeReadonlyCell(ST.fmtServiceTime(ev.start_time + ev.duration)));
       tr.appendChild(makeGapCell(ev, events[i + 1] || null));
       tr.appendChild(makeRemainingCell());
@@ -289,8 +289,15 @@
   }
 
 
-  function makeInput(ev, field, value, type) {
+  /** One <td> per editable field, with its −/+/now buttons IN THE SAME
+      CELL: the cluster then cannot drift apart from its input when the
+      table distributes surplus width (auto layout widens the column
+      around the whole cluster, never between its elements).  The
+      cell-<field> class carries the CSS grouping rules.  `step` is
+      omitted for the name field, which has no buttons. */
+  function makeInput(ev, field, value, type, step) {
     const td = document.createElement("td");
+    td.className = "cell-" + field; // field-adjacent padding (style.css)
     const input = document.createElement("input");
     input.type = type;
     input.value = value;
@@ -301,6 +308,7 @@
     if (field === "duration") input.min = "1";
     input.addEventListener("change", () => commitInput(ev.id, field, input));
     td.appendChild(input);
+    if (step !== undefined) td.appendChild(makeStepButtons(ev, field, step));
     return td;
   }
 
@@ -370,14 +378,14 @@
     }
   }
 
-  /** +/− buttons for start/duration; cascade per the toolbar checkbox.
-      Start rows also get a "now" button: sets the start to the current
-      minute (rounded backwards, so the event is already running and the
-      HH:MM column stays clean) and shifts later events by the same
-      delta per the same checkbox. */
+  /** The −/+/now buttons for one field, as a fragment to append into
+      the field's OWN cell (see makeInput) — cascade per the toolbar
+      checkbox.  Start rows also get a "now" button: sets the start to
+      the current minute (rounded backwards, so the event is already
+      running and the HH:MM column stays clean) and shifts later events
+      by the same delta per the same checkbox. */
   function makeStepButtons(ev, field, step) {
-    const td = document.createElement("td");
-    td.className = "step-buttons";
+    const frag = document.createDocumentFragment();
     const buttons = [
       ["−", -step],
       ["+", step],
@@ -396,7 +404,7 @@
           })
         );
       });
-      td.appendChild(btn);
+      frag.appendChild(btn);
     }
     if (field === "start_time") {
       const nowBtn = document.createElement("button");
@@ -423,9 +431,9 @@
           })
         );
       });
-      td.appendChild(nowBtn);
+      frag.appendChild(nowBtn);
     }
-    return td;
+    return frag;
   }
 
   function makeReadonlyCell(text) {
