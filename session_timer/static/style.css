@@ -6,6 +6,15 @@
   --green: #2ecc40;
   --yellow: #ffdc00;
   --red: #ff4136;
+  /* Countdown-text colors on the display page: separate from the bar
+     colors above so the numbers can be tuned for readability in a
+     given lighting without touching the bar (and vice versa).  These
+     are the shared colors lightened ~45% toward white — considerably
+     softer than the fully saturated bars, still clearly
+     green/yellow/red.  Tune per deployment here. */
+  --timer-green: #8ce396;
+  --timer-yellow: #ffec73;
+  --timer-red: #ff9790;
 }
 
 * {
@@ -48,9 +57,9 @@ body.display {
   line-height: 1;
 }
 
-#timer.green { color: var(--green); }
-#timer.yellow { color: var(--yellow); }
-#timer.red { color: var(--red); }
+#timer.green { color: var(--timer-green); }
+#timer.yellow { color: var(--timer-yellow); }
+#timer.red { color: var(--timer-red); }
 
 /* Small clock on the display page, top-left (the controls sit
    top-right): the session's own time, server-anchored — on a correctly

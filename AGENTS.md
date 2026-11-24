@@ -82,7 +82,11 @@ Phases 1–4 are implemented and verified:
   currently running the next upcoming row is highlighted (tr.next,
   --next-bg in both themes, matching the display's next-speaker bar);
   the Help popup covers the event-now dropdown, clocks, and the embed
-  view.
+  view; hover docs moved from row titles onto the Remaining cells and
+  column headers; and the display countdown-text colors are their own
+  CSS variables (--timer-green/yellow/red, set to ~45%-lightened
+  variants of the shared colors so the numbers are a lot softer than
+  the fully saturated bars).
 - Mobile polish, deliberately small: the admin's events table
   scrolls horizontally in an `.table-wrap` (overflow-x: auto + table
   min-width 48rem) instead of squishing — no responsive redesign, the
