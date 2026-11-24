@@ -78,6 +78,32 @@ body.display #clock {
   line-height: 1;
 }
 
+/* "Screen stays on" indicator for the wake lock (display.js): shown
+   whenever the lock is actually held (browsers auto-release it in the
+   background; display.js re-acquires on return).  Sits under the
+   clock, top-left, above the dim overlay (same z-index as the
+   controls) so it stays readable in a dimmed room, and it is tappable
+   to release the lock — the case it exists for is a phone left on a
+   desk, where the always-faded control cluster is not looking at you. */
+body.display #wake-status {
+  position: fixed;
+  top: calc(0.5rem + min(4vw, 6vh) + 0.4rem);
+  left: 0.5rem;
+  z-index: 10;
+  padding: 0.15rem 0.5rem;
+  font-family: inherit;
+  font-size: min(2vw, 3vh);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+body.display #wake-status[hidden] {
+  display: none;
+}
+
 #bar-wrap {
   position: fixed;
   left: 0;
@@ -169,6 +195,14 @@ body.display #clock {
 #display-controls button:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* Active wake-lock button: inverted, still strictly black/white (the
+   glyph is ⊙, a text-style symbol — no color emoji). */
+#display-controls button.on {
+  background: #fff;
+  color: #000;
+  border-color: #fff;
 }
 
 /* The hidden attribute must beat the fixed flex layout above (used by

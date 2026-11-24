@@ -136,6 +136,18 @@ Phases 1–4 are implemented and verified:
   org.opencontainers.image.version.  Release flow: commit, tag
   (`v0.2.0`), push — commits past the tag self-describe in every later
   image.
+- Display-page wake lock (opt-in ⊙ button in the controls cluster +
+  an always-visible "screen stays on" badge under the clock, tappable
+  to release): Screen Wake Lock API so a phone/tablet left on a desk
+  does not auto-lock mid-session.  Preference persisted per browser
+  (localStorage, like the clock); both controls reflect whether the
+  lock is *actually* held (release event + visibilitychange
+  re-acquire per the documented pattern; the restored preference
+  retries on the first pointerdown, since the initial request lacks
+  user activation); hidden when the API is missing (old browsers) and
+  skipped entirely in the admin preview embed (must not keep the
+  admin's own screen awake).  No server changes.  Support:
+  Chrome/Edge 84+, Firefox 126+, Safari/iOS 16.4+ (~96% global).
 - Verified live with uvicorn: pages 200, 409 on stale generation, CSV
   round-trip, WebSocket initial state + push + ping/pong
 - Audit fixes (post-timezone-redesign): mutations validate the

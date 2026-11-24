@@ -13,10 +13,12 @@
   <button id="fullscreen" title="Toggle fullscreen (Esc also exits)">⛶</button>
   <button id="font-bigger" title="Larger countdown text">+</button>
   <button id="clock-toggle" title="Toggle the small clock (this screen only)">⏱</button>
+  <button id="wake-lock" title="Keep the screen on (wake lock; remembered for this screen)" aria-pressed="false">⊙</button>
   <button id="dim-darker" title="Dim the screen (synced to all panels)">☾</button>
   <button id="dim-lighter" title="Brighten the screen (synced to all panels)">☀</button>
 </div>
 <div id="clock" title="Current time (session timezone)"></div>
+<button id="wake-status" hidden title="Wake lock is on: the screen is kept awake. Click to allow sleep again." aria-pressed="true">screen stays on</button>
 <div id="timer"></div>
 <div id="next-wrap" hidden>
   <div id="next-bar"></div>
