@@ -40,6 +40,17 @@ DATA_DIR = os.environ.get("SESSION_TIMER_DATA_DIR") or None
 SNAPSHOT_INTERVAL_SECONDS = int(
     os.environ.get("SESSION_TIMER_SNAPSHOT_INTERVAL", "300")
 )
+# Fail soft on a garbage value (or one below 5 s, i.e. a hot snapshot
+# loop): the interval is an operator convenience, not a security
+# boundary, so it clamps to the default instead of crashing at startup
+# or thrashing the disk.
+try:
+    SNAPSHOT_INTERVAL_SECONDS = max(5, int(SNAPSHOT_INTERVAL_SECONDS))
+except (TypeError, ValueError):
+    SNAPSHOT_INTERVAL_SECONDS = 300
+
+if not isinstance(SNAPSHOT_INTERVAL_SECONDS, int) or SNAPSHOT_INTERVAL_SECONDS < 5:
+    SNAPSHOT_INTERVAL_SECONDS = 300
 
 # ------------------------------------------------- default timezone
 # Optional default session timezone (IANA zone name, e.g.

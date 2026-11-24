@@ -419,6 +419,19 @@ def test_snapshot_roundtrip_unicode(tmp_path):
     assert restored.get("ünïcode").events[0].name == "日本語"
 
 
+def test_snapshot_file_mode_owner_only(tmp_path):
+    """The snapshot holds the full schedule; on a multi-user host it
+    must not be world-readable (written 0600 regardless of umask)."""
+    import stat
+
+    store = SessionStore()
+    store.get_or_create("perm")
+    path = tmp_path / "sessions.json"
+    store.save_snapshot(path)
+    mode = stat.S_IMODE(path.stat().st_mode)
+    assert mode == 0o600
+
+
 def test_snapshot_of_empty_store_roundtrips(tmp_path):
     store = SessionStore()
     path = tmp_path / "sessions.json"

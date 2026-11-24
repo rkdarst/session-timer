@@ -130,13 +130,25 @@ async def request_body_cap(request: Request, call_next):
     either a mistake or a memory-exhaustion attempt.  Starlette reads
     the whole body into memory before pydantic validates it, so route
     validation alone bounds nothing.
+
+    The check reads the BODY (not the Content-Length header): a
+    declared length is client-controlled and chunked requests omit it
+    entirely, so a header-only check would be a speed bump, not a cap.
+    Draining up to the limit and rejecting past it bounds memory at
+    exactly the cap for every /api/ route; responses are returned
+    rather than raised because user middleware sits outside the
+    ExceptionMiddleware layer (a raise would surface as a 500).
     """
     if request.url.path.startswith("/api/"):
         declared = request.headers.get("content-length", "")
         if declared.isdigit() and int(declared) > config.MAX_CSV_UPLOAD_BYTES:
-            # Note: return the response rather than raising — a raise
-            # in user middleware sits outside the ExceptionMiddleware
-            # layer and would surface as a 500.
+            return PlainTextResponse(
+                f"request body too large (limit "
+                f"{config.MAX_CSV_UPLOAD_BYTES} bytes)",
+                status_code=413,
+            )
+        body = await request.body()
+        if len(body) > config.MAX_CSV_UPLOAD_BYTES:
             return PlainTextResponse(
                 f"request body too large (limit "
                 f"{config.MAX_CSV_UPLOAD_BYTES} bytes)",
@@ -249,6 +261,21 @@ def day_seconds_now(session) -> int:
     return int((time.time() + offset) % (24 * 3600))
 
 
+def check_generation(generation: int) -> int:
+    """Validate the client-supplied generation, rejecting negatives.
+
+    Zero is meaningful (a fresh session counts from 0), but a negative
+    value can never match any real counter — reject it as a malformed
+    input (400) rather than letting it 409 later, so the error says
+    "your request was malformed" instead of "your view is stale".
+    """
+    if generation < 0:
+        raise HTTPException(
+            status_code=400, detail="X-Generation must be a non-negative integer"
+        )
+    return generation
+
+
 def run_mutation(name: str, client_generation: int, mutate):
     """Shared mutation preamble: staleness check + error mapping.
 
@@ -262,6 +289,7 @@ def run_mutation(name: str, client_generation: int, mutate):
     junk-named sessions that no page URL could ever reach.
     """
     check_name(name)
+    check_generation(client_generation)
     # Session-cap check first: a full store must surface as 503, not
     # as a misleading 409 (the request is not stale — it is refused).
     if store.get(name) is None and len(store.sessions) >= config.MAX_SESSIONS:

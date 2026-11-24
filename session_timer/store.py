@@ -673,7 +673,11 @@ class SessionStore:
             },
         }
         tmp = path.with_suffix(path.suffix + ".tmp")
-        with open(tmp, "w", encoding="utf-8") as fh:
+        # 0o600: the snapshot holds the full schedule (names, times);
+        # on a multi-user host it should not be world-readable.  The
+        # final os.replace() preserves the mode on the real file.
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(data, fh, ensure_ascii=False)
             fh.flush()
             os.fsync(fh.fileno())

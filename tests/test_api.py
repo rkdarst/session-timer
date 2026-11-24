@@ -231,6 +231,16 @@ def test_missing_generation_header_rejected(client):
     assert resp.status_code == 422  # required header missing
 
 
+def test_negative_generation_rejected_with_400(client):
+    """A negative generation can never match a real counter (which only
+    counts up from 0): malformed input, so 400 — not the misleading
+    stale-view 409."""
+    resp = add_event(client, -1, "nope", 1000, 600)
+    assert resp.status_code == 400
+    assert "X-Generation" in resp.json()["detail"]
+    assert store.get(NAME) is None  # rejected before anything was created
+
+
 def test_patch_event_end_time(client):
     event_id = add_event(client, 0, "", 1000, 600).json()["events"][0]["id"]
     resp = client.patch(
@@ -770,6 +780,19 @@ def test_oversized_json_body_rejected_413(client):
         headers=gen(0),
     )
     assert r.status_code == 413
+
+
+def test_oversized_body_chunked_no_content_length_413(client):
+    """The body cap reads the actual body, not just the (absent or
+    lying) Content-Length header: a chunked 2 MB upload must 413 too."""
+    big = "0:00,60,x\n" * 120_000  # ~1.1 MB, over the 1 MB limit
+    r = client.put(
+        f"/api/{NAME}/events.csv",
+        content=big.encode(),
+        headers={**gen(0), "Content-Type": "text/csv"},
+    )
+    assert r.status_code == 413
+    assert store.get(NAME) is None  # rejected before anything was created
 
 
 def test_missing_generation_header_is_422(client):
