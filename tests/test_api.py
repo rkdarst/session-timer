@@ -176,7 +176,6 @@ def test_state_empty_session_does_not_create(client):
     assert data["timezone"] is None
     assert data["utc_offset"] is None
     assert isinstance(data["server_time"], float)
-    assert data["font_scale"] == 1.0
     assert data["dim_level"] == 0.0
     assert data["events"] == []
     assert store.get(NAME) is None  # read-only path never creates
@@ -568,39 +567,6 @@ def test_websocket_initial_state_and_push(client):
         ws.send_text("ping")
         assert ws.receive_json() == {"type": "pong"}
 
-        # a display syncing its font size is pushed too (so the admin
-        # page's embedded preview mirrors it)
-        r = client.put(f"/api/{NAME}/font-scale", json={"scale": 2.07})
-        assert r.status_code == 200
-        assert ws.receive_json()["font_scale"] == 2.07
-
-
-def test_font_scale_syncs_without_generation_change(client):
-    client.post(f"/api/{NAME}/timezone", json={"timezone": "Europe/Berlin"})
-    before = client.get(f"/api/{NAME}/state").json()["generation"]
-    r = client.put(f"/api/{NAME}/font-scale", json={"scale": 1.73})
-    assert r.status_code == 200
-    assert r.json()["font_scale"] == 1.73
-    state = client.get(f"/api/{NAME}/state").json()
-    assert state["font_scale"] == 1.73
-    # presentation-only: schedule generation is untouched (displays
-    # don't track it, so requiring one would break them)
-    assert state["generation"] == before
-    # validation
-    assert client.put(f"/api/{NAME}/font-scale", json={"scale": 0}).status_code == 400
-    assert client.put(
-        f"/api/{NAME}/font-scale", json={"scale": -1}
-    ).status_code == 400
-    assert client.put(f"/api/{NAME}/font-scale", json={"scale": 1.73}).status_code == 200
-
-
-def test_font_scale_never_creates_session(client):
-    assert (
-        client.put("/api/nowhere-session/font-scale", json={"scale": 1.2}).status_code
-        == 404
-    )
-    assert store.get("nowhere-session") is None
-
 
 def test_dim_level_syncs_without_generation_change(client):
     client.post(f"/api/{NAME}/timezone", json={"timezone": "Europe/Berlin"})
@@ -851,11 +817,8 @@ def test_patch_end_time_before_start_rejected(client):
     assert r.status_code == 400  # end == start => zero duration
 
 
-def test_font_scale_and_dim_bounds_rejected(client):
+def test_dim_bounds_rejected(client):
     client.post(f"/api/{NAME}/timezone", json={"timezone": "UTC"})
-    for bad in (100, -1):
-        r = client.put(f"/api/{NAME}/font-scale", json={"scale": bad})
-        assert r.status_code == 400
     for bad in (0.95, -0.1):
         r = client.put(f"/api/{NAME}/dim", json={"level": bad})
         assert r.status_code == 400

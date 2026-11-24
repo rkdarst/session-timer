@@ -231,7 +231,6 @@ def empty_state(name: str) -> dict:
         "timezone": None,
         "utc_offset": None,
         "server_time": time.time(),
-        "font_scale": 1.0,
         "dim_level": 0.0,
         "events": [],
     }
@@ -348,10 +347,6 @@ class EventNowIn(BaseModel):
 class TimezoneIn(BaseModel):
     timezone: str
     force: bool = False  # admin menu "Set timezone to this browser": replace
-
-
-class FontScaleIn(BaseModel):
-    scale: float
 
 
 class DimIn(BaseModel):
@@ -511,27 +506,6 @@ async def get_state(name: str):
         return empty_state(name)
     session.touch()
     return session.to_dict()
-
-
-@app.put("/api/{name}/font-scale")
-async def put_font_scale(name: str, body: FontScaleIn):
-    """Sync a display browser's countdown text-size choice.
-
-    The text size is presentation, not schedule state: display browsers
-    don't track the generation counter, so this neither sends nor bumps
-    the generation — it updates the session and pushes state so embedded
-    previews on admin pages mirror the choice.  A nonexistent session is
-    a 404: read-only paths never create sessions.
-    """
-    check_name(name)
-    session = store.get(name)
-    if session is None:
-        raise HTTPException(status_code=404, detail="unknown session")
-    try:
-        session.set_font_scale(body.scale)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return await broadcast_state(name, session)
 
 
 @app.put("/api/{name}/dim")

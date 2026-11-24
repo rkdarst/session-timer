@@ -221,11 +221,6 @@ class Session:
     # menu ("Set timezone to this browser").  None until then (the
     # server's config.DEFAULT_TZ fills in when resolvable).
     timezone: str | None = None
-    # Countdown text-size scale chosen on a display browser (one of
-    # display.js's FONT_SCALES steps).  Synced to the session so the
-    # admin page's embedded preview can mirror it; presentation-only
-    # state (never bumps the generation).
-    display_font_scale: float = 1.0
     # Room-dimming overlay level (0 = off, 0.9 = 90% black), chosen via
     # the darker/lighter buttons on any panel.  Synced so an admin can
     # dim displays they cannot physically reach; presentation-only
@@ -248,33 +243,18 @@ class Session:
             "timezone": self.timezone,
             "utc_offset": self.resolved_utc_offset(),
             "server_time": time.time(),
-            "font_scale": self.display_font_scale,
             "dim_level": self.dim_level,
             "events": [event.to_dict() for event in self.events],
         }
 
-    def set_font_scale(self, scale: object) -> None:
-        """Set the countdown text-size scale a display browser chose.
+    def set_dim_level(self, level: object) -> None:
+        """Set the room-dimming overlay level (0 = off, 0.9 = 90% black).
 
         Presentation-only state: the generation counter is untouched
         (this is not schedule state, and display browsers don't track
         generations), but the change is broadcast in the state payload
-        and persisted via snapshots.
-        """
-        if isinstance(scale, bool) or not isinstance(scale, (int, float)):
-            raise ValueError("scale must be a number")
-        scale = float(scale)
-        if not 0 < scale <= 16:
-            raise ValueError("scale must be between 0 and 16")
-        self.display_font_scale = scale
-        self.touch()
-
-    def set_dim_level(self, level: object) -> None:
-        """Set the room-dimming overlay level (0 = off, 0.9 = 90% black).
-
-        Presentation-only state like ``display_font_scale``: no
-        generation bump, broadcast in the state payload, persisted via
-        snapshots.  Capped at 0.9 so the screen never goes fully black.
+        and persisted via snapshots.  Capped at 0.9 so the screen never
+        goes fully black.
         """
         if isinstance(level, bool) or not isinstance(level, (int, float)):
             raise ValueError("level must be a number")
@@ -622,7 +602,7 @@ class SessionStore:
         one interval late is harmless.)
         """
         return frozenset(
-            (name, session.generation, session.display_font_scale, session.dim_level)
+            (name, session.generation, session.dim_level)
             for name, session in self.sessions.items()
         )
 
@@ -657,7 +637,6 @@ class SessionStore:
                     "generation": session.generation,
                     "timezone": session.timezone,
                     "last_used": session.last_used,
-                    "font_scale": session.display_font_scale,
                     "dim_level": session.dim_level,
                     "events": [
                         {
@@ -733,9 +712,7 @@ class SessionStore:
                 # the schedule becomes a reusable daily template instead
                 timezone=sd.get("timezone"),
                 last_used=float(sd["last_used"]),
-                # snapshots predating font-scale sync lack the key
-                display_font_scale=float(sd.get("font_scale", 1.0)),
-                # ... and those predating room-dimming lack this one
+                # snapshots predating room-dimming lack the key
                 dim_level=float(sd.get("dim_level", 0.0)),
             )
             for ed in sd["events"]:

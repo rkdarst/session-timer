@@ -20,11 +20,11 @@ Phases 1–4 are implemented and verified:
 - `session_timer/main.py` — HTTP + JSON API + WebSocket push
 - `session_timer/static/` — admin and display UIs (plain HTML/JS/CSS);
   the admin page embeds a live preview of the display page in an
-  iframe (`?embed=1`), which mirrors the text size a display browser
-  last chose (`PUT /api/{name}/font-scale`, presentation-only — no
-  generation bump; included in state payloads and snapshots); the same
-  pattern carries the room-dim level (`PUT /api/{name}/dim`, steps up
-  to 90% black) with darker/lighter buttons on both pages
+  iframe (`?embed=1`) — controls hidden, rendered at the preview's own
+  default size; the same session-state pattern carries the room-dim
+  level (`PUT /api/{name}/dim`, steps up to 90% black,
+  presentation-only — no generation bump) with darker/lighter buttons
+  on both pages
 - `tests/test_store.py`, `tests/test_api.py` — all tests passing
 - Admin toolbar: add/event-now/cascade/preview/dim buttons stay
   visible; overflow actions (display link, QR, CSV download/upload,

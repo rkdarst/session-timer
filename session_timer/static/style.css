@@ -523,8 +523,8 @@ td.cell-duration button {
 /* Tiny always-on live preview in the admin toolbar: an iframe of the
    real display page (?embed=1).  The display layout is proportional to
    its viewport, so even at this strip size it shows exactly what the
-   projector shows (color state, idle/expired, next-speaker bar, and
-   the font scale a display browser last chose). */
+   projector shows (color state, idle/expired, and the next-speaker
+   bar). */
 #preview-frame {
   width: 4rem;
   height: 3rem;

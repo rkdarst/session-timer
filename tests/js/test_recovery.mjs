@@ -155,12 +155,12 @@ const plan = (...handlers) => fetchPlan.push(...handlers);
 
 const realState = (gen, events, tz) => ({
   name: "testsession", generation: gen, timezone: tz, utc_offset: 0,
-  server_time: 1700000000, font_scale: 1, dim_level: 0,
+  server_time: 1700000000, dim_level: 0,
   events: events.map((e, i) => ({ id: "e" + i, ...e })),
 });
 const emptyState = () => ({
   name: "testsession", generation: null, timezone: null, utc_offset: null,
-  server_time: 1700000001, font_scale: 1, dim_level: 0, events: [],
+  server_time: 1700000001, dim_level: 0, events: [],
 });
 const json = (data) => ({ ok: true, json: async () => data });
 

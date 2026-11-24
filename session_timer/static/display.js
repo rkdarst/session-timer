@@ -29,10 +29,9 @@
   const NEXT_WINDOW = CONFIG.nextWindowSeconds;
 
   // Embedded in the admin page's live preview (iframe with ?embed=1):
-  // the fullscreen and text-size controls make no sense there, and the
-  // preview must not touch the persisted per-browser font size (that
-  // belongs to the real display's browser).  Everything else renders
-  // exactly like a standalone display.
+  // the controls (fullscreen, text size, clock toggle, wake lock) are
+  // hidden there; everything else renders exactly like a standalone
+  // display, at the preview's own default size.
   const embed = new URLSearchParams(window.location.search).has("embed");
   if (embed) {
     document.getElementById("display-controls").hidden = true;
@@ -49,10 +48,6 @@
   // server time into the session's wall-clock seconds of day (ST.dayNow).
   // Null until the server sends it; dayNow falls back to local time.
   let utcOffset = null;
-  // In the admin preview (embed mode) the mirrored font scale comes
-  // from the server state: display browsers sync their +/- choice there
-  // (see applyFontSize), so the preview shows the chosen relative size.
-  let serverFontScale = null;
 
   // Room-dimming overlay: a session-synced black fade for dark rooms.
   // All panels (standalone displays and embedded previews) share one
@@ -104,7 +99,6 @@
     // utc_offset on every tick, so no conversion is needed here.
     events = data.events;
     utcOffset = data.utc_offset;
-    if (embed) serverFontScale = data.font_scale;
     if (typeof data.dim_level === "number") {
       dimLevel = data.dim_level;
       applyDim();
@@ -265,8 +259,8 @@
   }
 
   /** Nearest FONT_SCALES step to `scale` (the default step for junk:
-      null, non-numbers, or non-positive values).  Used both to restore
-      a saved size and to mirror a display machine's synced choice. */
+      null, non-numbers, or non-positive values).  Used to restore a
+      saved size. */
   function nearestFontIndex(scale) {
     if (typeof scale !== "number" || !Number.isFinite(scale) || scale <= 0) {
       return FONT_SCALES.indexOf(1);
@@ -281,7 +275,6 @@
   }
 
   function loadFontIndex() {
-    if (embed) return FONT_SCALES.indexOf(1); // preview: server scale instead
     try {
       const saved = parseFloat(window.localStorage.getItem(FONT_SCALE_KEY));
       if (Number.isFinite(saved) && saved > 0) {
@@ -299,8 +292,7 @@
 
   /** Clock visibility: per-display-browser, persisted like the font
       scale.  Defaults to on.  The admin-page preview (embed) always
-      shows the clock in its default look — a localStorage setting
-      cannot be mirrored via the server the way the font scale is. */
+      shows the clock (its toggle is hidden). */
   function loadClockVisible() {
     if (embed) return true;
     try {
@@ -391,15 +383,6 @@
       render() on every tick so the fit cap tracks the current text. */
   function applyTimerSize() {
     const fitPx = fitFontSizePx(timerEl.textContent || "MM:SS");
-    if (embed) {
-      // Mirror the display machine's chosen scale (synced via the
-      // server, see applyFontSize); the fit cap still applies to this
-      // (smaller) viewport.  The +/- buttons are hidden here.
-      const idx = nearestFontIndex(serverFontScale);
-      timerEl.style.fontSize =
-        Math.min(baseFontSizePx() * FONT_SCALES[idx], fitPx) + "px";
-      return;
-    }
     fontIndex = Math.min(fontIndex, maxFontIndex());
     timerEl.style.fontSize =
       Math.min(baseFontSizePx() * FONT_SCALES[fontIndex], fitPx) + "px";
@@ -409,20 +392,11 @@
 
   function applyFontSize() {
     applyTimerSize();
-    if (embed) return; // the preview never persists a font size
     try {
       window.localStorage.setItem(FONT_SCALE_KEY, String(FONT_SCALES[fontIndex]));
     } catch (err) {
       /* non-fatal: size just won't persist */
     }
-    // Sync the choice to the session so embedded previews (the admin
-    // page) mirror it.  Fire-and-forget: a failure just leaves the
-    // preview on its previous scale.
-    fetch(ST.apiUrl(name, "/font-scale"), {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scale: FONT_SCALES[fontIndex] }),
-    }).catch(() => {});
   }
 
   fontSmallerBtn.addEventListener("click", () => {
