@@ -212,12 +212,15 @@ body.display #wake-status[hidden] {
   stroke-linejoin: round;
 }
 
-/* Active wake-lock button: inverted, still strictly black/white (the
-   bulb's strokes follow currentColor — see display.html). */
+/* Active wake-lock button: same black-on-light inversion as before but
+   softened — a solid #fff square is glaring on a dark/projected display,
+   so the "on" fill is translucent white (renders as grey over the black
+   page).  Still clearly distinct from the idle buttons (0.12 fill) and
+   the bulb's strokes stay black via currentColor — see display.html. */
 #display-controls button.on {
-  background: #fff;
+  background: rgba(255, 255, 255, 0.5);
   color: #000;
-  border-color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
 }
 
 /* The hidden attribute must beat the fixed flex layout above (used by
