@@ -322,6 +322,18 @@ body.admin.dark {
   margin-bottom: 1rem;
 }
 
+/* The trailing hamburger dropdown must stay pinned to the right edge
+   of the toolbar, never wrapped onto its own line: its menu opens
+   right-aligned BELOW the button, so a wrapped button leaves the menu
+   looking detached (and partly off-flow).  margin-left: auto (instead
+   of the flex: 1 spacer being the only glue) keeps it right-aligned
+   even when intermediate items wrap; nowrap on the dropdown itself
+   keeps the ☰ button on the same line as whatever space remains. */
+.toolbar > .dropdown-right {
+  margin-left: auto;
+  flex-wrap: nowrap;
+}
+
 /* Small session-time clock in the toolbar (HH:MM:SS in the session
    timezone — the clock the schedule runs on; see the ☰ menu's timezone
    line for which zone that is). */
