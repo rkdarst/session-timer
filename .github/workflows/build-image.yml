@@ -2,9 +2,11 @@
 # multi-arch image: linux/amd64 plus linux/arm64 (e.g. Raspberry Pi 5
 # on 64-bit Raspberry Pi OS).
 #
-# Job `test` runs pytest (same uv.lock as the image), builds the amd64
-# image locally and smoke-tests the container — on every push / PR /
-# manual dispatch.  Job `publish` (pushes only, after `test`) cross-
+# Job `test` runs pytest (same uv.lock as the image), audits the locked
+# dependencies for known CVEs (pip-audit, non-blocking at first — flip
+# continue-on-error to false once the noise level is known), builds the
+# amd64 image locally and smoke-tests the container — on every push /
+# PR / manual dispatch.  Job `publish` (pushes only, after `test`) cross-
 # builds amd64 + arm64 under QEMU and pushes the multi-arch manifest to
 # `ghcr.io/rkdarst/session-timer:latest` with the workflow's own
 # GITHUB_TOKEN (packages: write — no registry credentials or secrets
@@ -58,6 +60,35 @@ jobs:
         run: |
           uv sync --frozen
           uv run --no-sync pytest -q
+
+      # Dependency audit: check every package pinned in uv.lock against
+      # the PyPA advisory database (CVE/GHSA).  Audits the runtime
+      # graph exactly as the Docker image installs it (--no-dev, from
+      # the lockfile — no resolution, no upgrades; uv.lock itself is
+      # never modified, updates remain a deliberate `uv lock --upgrade`
+      # + review).  Non-blocking for now (continue-on-error) so an
+      # advisory can be triaged without failing every build; flip to
+      # strict by removing that flag once the baseline is known.  A
+      # finding is also annotated in the summary with its aliases and
+      # the fixed versions, so the fix is one `uv lock --upgrade` away.
+      - name: Audit locked dependencies (pip-audit)
+        continue-on-error: true
+        run: |
+          uv export --frozen --no-dev --format requirements-txt --no-hashes -o /tmp/requirements.txt
+          # --no-deps: the requirements file is already the fully
+          # resolved lock graph; asking pip-audit to re-resolve it (its
+          # default) would query PyPI for each package and could pick
+          # versions that differ from the lockfile.
+          uv run --no-sync --with pip-audit python -m pip_audit \
+            -r /tmp/requirements.txt --no-deps --progress-spinner off \
+            --format markdown --output /tmp/audit.md || true
+          if [ -s /tmp/audit.md ]; then
+            cat /tmp/audit.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          # Exit non-zero on findings for the step marker, but do not
+          # fail the job (continue-on-error above tolerates it).
+          uv run --no-sync --with pip-audit python -m pip_audit \
+            -r /tmp/requirements.txt --no-deps --progress-spinner off
 
       - uses: docker/setup-buildx-action@v4
 
