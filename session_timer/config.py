@@ -77,9 +77,32 @@ ADMIN_MESSAGE = (os.environ.get("SESSION_TIMER_MESSAGE") or "").strip()[:512] or
 #     past it, "-dirty" appended when the build tree had uncommitted
 #     changes, or the short sha when no tag exists yet.
 #   SESSION_TIMER_GIT_HASH — the full commit sha.
-# Local runs and plain `uvicorn` get "unknown" for both.  Served by
-# /api/banner and shown in the admin ☰ menu so a deployed instance can
-# be tied to its exact source; also set as OCI labels
-# org.opencontainers.image.revision / .version on the image.
-GIT_VERSION = os.environ.get("SESSION_TIMER_GIT_VERSION") or "unknown"
+# Without the build args (plain `uvicorn` run), the version falls back
+# through the installed package metadata (Docker image, pip-installed
+# venvs) and pyproject.toml next to the package (source checkout) — so
+# /api/banner essentially always knows a version; "unknown" only when
+# none of the three tiers can answer.  Served by /api/banner and shown
+# in the admin ☰ menu so a deployed instance can be tied to its exact
+# source; also set as OCI labels org.opencontainers.image.revision /
+# .version on the image.
+def _fallback_version():
+    try:  # installed package (pip install / Docker image)
+        from importlib.metadata import version
+
+        return version("session-timer")
+    except Exception:
+        pass
+    try:  # source checkout: pyproject.toml next to the package
+        import tomllib
+        from pathlib import Path
+
+        pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+        return tomllib.loads(pyproject.read_text())["project"]["version"]
+    except Exception:
+        return None
+
+
+GIT_VERSION = (
+    os.environ.get("SESSION_TIMER_GIT_VERSION") or _fallback_version() or "unknown"
+)
 GIT_HASH = os.environ.get("SESSION_TIMER_GIT_HASH") or "unknown"

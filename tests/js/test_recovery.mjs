@@ -76,8 +76,8 @@ const elements = {};
 const fetchCalls = [];
 let fetchPlan = [];
 
-// Count fetches SINCE a marker: boot-time calls (/state, /api/banner,
-// /api/persistence) land before scenarios start, so assertions must
+// Count fetches SINCE a marker: boot-time calls (/state, /api/banner)
+// land before scenarios start, so assertions must
 // look at the tail of the log, not absolute offsets.
 const mark = () => fetchCalls.length;
 const since = (m) => fetchCalls.slice(m);
@@ -185,7 +185,7 @@ const json = (data) => ({ ok: true, json: async () => data });
   p1.onState(emptyState());
   await tick();
   const s1 = since(base).filter(
-    (c) => c.url.includes("/api/") && !c.url.includes("/state") && !c.url.includes("/banner") && !c.url.includes("/persistence")
+    (c) => c.url.includes("/api/") && !c.url.includes("/state") && !c.url.includes("/banner")
   );
   if (s1.length !== 2) fail("S1: expected tz POST + CSV PUT, got " + s1.length);
   if (!elements["error-banner"].textContent.includes("restored 1 event(s)")) {
@@ -207,7 +207,7 @@ const json = (data) => ({ ok: true, json: async () => data });
   p1.onState(emptyState());
   await tick();
   const s1b = since(b1).filter(
-    (c) => c.url.includes("/api/") && !c.url.includes("/state") && !c.url.includes("/banner") && !c.url.includes("/persistence")
+    (c) => c.url.includes("/api/") && !c.url.includes("/state") && !c.url.includes("/banner")
   );
   if (s1b.length !== 2) fail("S1b: in-flight double restore! calls: " + s1b.length);
   ok("S1b: empty state during an in-flight restore does not double-restore");
@@ -225,7 +225,7 @@ const json = (data) => ({ ok: true, json: async () => data });
   p1.onState(emptyState());
   await tick();
   const s1c = since(b1c).filter(
-    (c) => c.url.includes("/api/") && !c.url.includes("/state") && !c.url.includes("/banner") && !c.url.includes("/persistence")
+    (c) => c.url.includes("/api/") && !c.url.includes("/state") && !c.url.includes("/banner")
   );
   if (s1c.length !== 2) fail("S1c: re-restore after re-arm failed: " + s1c.length);
   ok("S1c: latch re-armed after a successful restore (second restart also recovers)");
@@ -237,7 +237,7 @@ const json = (data) => ({ ok: true, json: async () => data });
   p2.onState(realState(2, [{ name: "Other", start_time: 7200, duration: 60 }], "Europe/Berlin"));
   await tick();
   const s2 = since(base2).filter(
-    (c) => c.url.includes("/api/") && !c.url.includes("/state") && !c.url.includes("/banner") && !c.url.includes("/persistence")
+    (c) => c.url.includes("/api/") && !c.url.includes("/state") && !c.url.includes("/banner")
   );
   if (elements["new-session-modal"].hidden !== false) fail("S2: new-epoch popup not shown");
   if (s2.length !== 0) fail("S2: popup must not fetch (saw " + s2.length + ")");
@@ -263,7 +263,7 @@ const json = (data) => ({ ok: true, json: async () => data });
   p2.onState(emptyState());
   await tick();
   const s2b = since(base2).filter(
-    (c) => c.url.includes("/api/") && !c.url.includes("/state") && !c.url.includes("/banner") && !c.url.includes("/persistence")
+    (c) => c.url.includes("/api/") && !c.url.includes("/state") && !c.url.includes("/banner")
   );
   if (s2b.length !== 2) fail("S2b: adopt did not re-arm recovery (epochHandled stuck)");
   ok("S2b: after Continue, a later restart re-restores the adopted state");
@@ -302,7 +302,7 @@ const json = (data) => ({ ok: true, json: async () => data });
   elements["add-event"].click(); // user clicks while the restore runs
   await tick();
   const s4calls = since(base4).filter(
-    (c) => c.url.includes("/api/") && !c.url.includes("/state") && !c.url.includes("/banner") && !c.url.includes("/persistence")
+    (c) => c.url.includes("/api/") && !c.url.includes("/state") && !c.url.includes("/banner")
   );
   if (s4calls.length !== 3) fail("S4: expected tz + CSV + events POST, got " + s4calls.length);
   const kinds = s4calls.map((c) => c.opts.method + " " + c.url);

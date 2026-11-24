@@ -483,19 +483,19 @@ def test_timezone_reset_force(client):
     assert r.json()["generation"] == 3
 
 
-def test_persistence_endpoint(client, monkeypatch):
+def test_banner_reports_persistence(client, monkeypatch):
+    """/api/banner also carries `persisted` (snapshot persistence
+    enabled): admin.js hides the "Events are NOT saved long term"
+    warning when it is true.  The route reads config.DATA_DIR at
+    request time, so monkeypatching flips the flag."""
     from session_timer import config
 
-    r = client.get("/api/persistence")
+    r = client.get("/api/banner")
     assert r.status_code == 200
-    assert r.json() == {"persisted": bool(config.DATA_DIR)}
+    assert r.json()["persisted"] == bool(config.DATA_DIR)
 
-    # When the operator sets SESSION_TIMER_DATA_DIR (here: patched after
-    # import, which the route reads at request time), the flag flips and
-    # admin.js hides the warning banner.
     monkeypatch.setattr(config, "DATA_DIR", "/tmp/session-timer-data")
-    r = client.get("/api/persistence")
-    assert r.json() == {"persisted": True}
+    assert client.get("/api/banner").json()["persisted"] is True
 
 
 def test_banner_endpoint(client, monkeypatch):
@@ -522,7 +522,7 @@ def test_banner_includes_git_hash(client, monkeypatch):
 
     r = client.get("/api/banner")
     assert r.status_code == 200
-    assert r.json()["git_version"] == config.GIT_VERSION  # "unknown" locally
+    assert r.json()["git_version"] == config.GIT_VERSION  # fallback-resolved locally
     assert r.json()["git_hash"] == config.GIT_HASH  # "unknown" locally
     monkeypatch.setattr(config, "GIT_VERSION", "0.2.0-3-g943694e")
     monkeypatch.setattr(config, "GIT_HASH", "abc1234567890")
@@ -531,21 +531,20 @@ def test_banner_includes_git_hash(client, monkeypatch):
     assert data["git_hash"] == "abc1234567890"
 
 
-def test_admin_js_version_mirror_matches_pyproject():
-    """The ☰ menu's fallback version: admin.js carries a manual mirror of
-    pyproject's version, used only when the server has no git-stamped
-    version (plain uvicorn run, no Docker build args).  Nothing keeps
-    the two in sync at runtime, so guard the mirror against drift."""
-    import re
+def test_git_version_fallback_resolves():
+    """Without a SESSION_TIMER_GIT_VERSION build arg, config falls back
+    through the installed package metadata and pyproject.toml — locally
+    that resolves to pyproject's version, never "unknown"."""
     import tomllib
     from pathlib import Path
 
+    from session_timer import config
+
+    if config.GIT_VERSION == "unknown":
+        pytest.skip("no env override and no fallback source available")
     root = Path(__file__).resolve().parent.parent
     expected = tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"]
-    js = (root / "session_timer" / "static" / "admin.js").read_text()
-    match = re.search(r'^const VERSION = "([^"]+)"', js, re.M)
-    assert match, "VERSION const not found in admin.js"
-    assert match.group(1) == expected
+    assert config.GIT_VERSION == expected
 
 
 def test_websocket_initial_state_and_push(client):

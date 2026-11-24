@@ -102,17 +102,17 @@ jobs:
           # --no-deps: the requirements file is already the fully
           # resolved lock graph; asking pip-audit to re-resolve it (its
           # default) would query PyPI for each package and could pick
-          # versions that differ from the lockfile.
+          # versions that differ from the lockfile.  One run only: the
+          # markdown report doubles as the exit-code check (pip-audit
+          # exits non-zero on findings even with --output), which
+          # continue-on-error above tolerates while the summary still
+          # lists the advisories.
           uv run --no-sync --with pip-audit python -m pip_audit \
             -r /tmp/requirements.txt --no-deps --progress-spinner off \
-            --format markdown --output /tmp/audit.md || true
+            --format markdown --output /tmp/audit.md
           if [ -s /tmp/audit.md ]; then
             cat /tmp/audit.md >> "$GITHUB_STEP_SUMMARY"
           fi
-          # Exit non-zero on findings for the step marker, but do not
-          # fail the job (continue-on-error above tolerates it).
-          uv run --no-sync --with pip-audit python -m pip_audit \
-            -r /tmp/requirements.txt --no-deps --progress-spinner off
 
       - uses: docker/setup-buildx-action@v4
 

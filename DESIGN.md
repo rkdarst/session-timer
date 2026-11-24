@@ -68,8 +68,8 @@ Allows one to view the events in the session and modify them.  There are control
   live, yellow when disconnected and retrying (the page keeps working
   via the 5 s polling fallback).
 * A permanent warning banner at the top ("Events are NOT saved long
-  term") — shown only when snapshot persistence is disabled (queried
-  from `GET /api/persistence`) — and a Help button opening a concise
+  term") — shown only when snapshot persistence is disabled (the
+  `persisted` field of `GET /api/banner`) — and a Help button opening a concise
   popup with the main points (URL = access, times-of-day semantics,
   cascade, display colors, memory-only data).
 * Toolbar overflow behind a ☰ hamburger menu (top right): display
@@ -153,7 +153,8 @@ ever written to disk.
 The admin page can show a deployment-wide **sysadmin message**: the
 `SESSION_TIMER_MESSAGE` environment variable is rendered inside the
 yellow warning banner on every admin page, above the data-loss warning
-text (when snapshot persistence is enabled the data-loss text hides,
+text (the banner response's `persisted` field reports whether snapshot
+persistence is enabled — when it is, the data-loss text hides,
 but a sysadmin message keeps the banner up).  It is read once at server
 start (restart to change), stripped and capped at 512 characters, and
 fetched once per page load from `GET /api/banner`; unset or empty means
@@ -162,8 +163,9 @@ no message.  The display page is not affected.
 The same `GET /api/banner` response also carries the **build
 identification**: `git_version` and `git_hash` come from the Docker
 build args `GIT_VERSION` / `GIT_HASH` (CI passes
-`git describe --tags --dirty --always` and the full commit sha; local
-builds and plain `uvicorn` runs get "unknown").  The admin ☰ menu
+`git describe --tags --dirty --always` and the full commit sha;
+without them the version falls back through the installed package
+metadata and pyproject.toml before giving up as "unknown").  The admin ☰ menu
 shows them as e.g. "session-timer 0.2.0-3-g943694e" — exactly `0.2.0`
 only when built from the tagged commit with a clean tree, `-N-g<sha>`
 for N commits past the newest tag, `-dirty` appended for uncommitted

@@ -361,30 +361,29 @@ class DimIn(BaseModel):
 # --------------------------------------------------------------- pages
 
 
-@app.get("/api/persistence")
-async def persistence_info():
-    """Whether snapshot persistence is enabled (drives the admin warning)."""
-    return {"persisted": bool(config.DATA_DIR)}
-
-
 @app.get("/api/banner")
 async def banner_message():
     """Sysadmin message (SESSION_TIMER_MESSAGE) shown on the admin page,
-    plus the build identification (git version + hash).
+    the build identification (git version + hash), and whether snapshot
+    persistence is enabled.
 
     Static per deployment: the text is read from the environment at
     import (``config.ADMIN_MESSAGE``, stripped and capped at 512
     characters); the empty string means "no message" and admin.js keeps
     the bar hidden.  The version/hash come from the Docker build args
     (GIT_VERSION = `git describe --tags --dirty --always`, GIT_HASH =
-    the full sha; "unknown" outside image builds).  All are read at
-    request time so tests can monkeypatch them; the admin page fetches
-    this once on load and shows the identifiers in the ☰ menu.
+    the full sha; the version falls back through the installed package
+    metadata and pyproject.toml to "unknown" outside image builds).
+    ``persisted`` (config.DATA_DIR) lets admin.js hide the "Events are
+    NOT saved long term" warning.  All are read at request time so
+    tests can monkeypatch them; the admin page fetches this once on
+    load (its only metadata request).
     """
     return {
         "message": config.ADMIN_MESSAGE or "",
         "git_version": config.GIT_VERSION,
         "git_hash": config.GIT_HASH,
+        "persisted": bool(config.DATA_DIR),
     }
 
 

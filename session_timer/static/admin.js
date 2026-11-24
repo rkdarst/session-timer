@@ -1,11 +1,5 @@
 "use strict";
 
-/* Fallback version (pyproject.toml, mirrored here): used for the ☰
-   menu's version line only when /api/banner has no git-stamped
-   version (plain uvicorn run, no Docker build args); the server's
-   `git describe` version wins when present. */
-const VERSION = "0.2.0";
-
 (function () {
   const name = ST.sessionName();
   const tbody = document.querySelector("#events-table tbody");
@@ -942,18 +936,6 @@ const VERSION = "0.2.0";
     warnBanner.hidden = sysadminMessage.hidden && dataLossWarning.hidden;
   }
 
-  fetch("/api/persistence")
-    .then((r) => r.json())
-    .then((cfg) => {
-      if (cfg && cfg.persisted) {
-        dataLossWarning.hidden = true;
-        updateWarnBanner();
-      }
-    })
-    .catch(() => {
-      /* keep the warning visible */
-    });
-
   // ---------------------------------------------- sysadmin message
 
   // SESSION_TIMER_MESSAGE (server environment): shown at the top of
@@ -967,8 +949,14 @@ const VERSION = "0.2.0";
   //   on a release tag, "0.2.0-3-g943694e" past it, "-dirty" appended
   //   when the build tree had uncommitted changes — which answers
   //   "is this build actually the released version?"  The full sha is
-  //   the unambiguous companion.  When both are "unknown" (plain
-  //   uvicorn run) only the static pyproject version is shown.
+  //   the unambiguous companion.  Unstamped builds (plain uvicorn run)
+  //   still get a version: the server falls back through the installed
+  //   package metadata and pyproject.toml (config.GIT_VERSION), so the
+  //   line is blank only when the server itself is unreachable — and
+  //   then we simply don't claim to know one.  The same response
+  //   carries `persisted` (snapshot persistence enabled): when true,
+  //   the data-loss warning text is hidden — a failed fetch keeps the
+  //   warning visible, failing safe.
   fetch("/api/banner")
     .then((r) => r.json())
     .then((cfg) => {
@@ -978,11 +966,15 @@ const VERSION = "0.2.0";
         sysadminMessage.hidden = false;
         updateWarnBanner();
       }
+      if (cfg && cfg.persisted) {
+        dataLossWarning.hidden = true;
+        updateWarnBanner();
+      }
       const versionInfo = document.getElementById("version-info");
       if (versionInfo) {
         // Prefer the described git version (it already encodes
-        // tag-distance + dirty state); fall back to the pyproject
-        // version when the build didn't stamp it.
+        // tag-distance + dirty state); a literal "unknown" (no tier
+        // answered) shows as-is rather than inventing a version.
         const gv =
           cfg && typeof cfg.git_version === "string" && cfg.git_version !== "unknown"
             ? cfg.git_version
@@ -995,21 +987,14 @@ const VERSION = "0.2.0";
         // hash when the version doesn't already carry one (a tag or
         // sha-only fallback).
         const describeHasNode = gv && /-g[0-9a-f]+$/.test(gv);
-        const parts = [gv || VERSION];
+        const parts = [gv || "unknown"];
         if (gh && (!gv || !describeHasNode)) parts.push(gh);
         versionInfo.textContent = "session-timer " + parts.join(" (") +
           ")".repeat(parts.length - 1);
       }
     })
     .catch(() => {
-      // No banner response at all (server unreachable / mid-restart):
-      // the sysadmin message stays hidden, but the version line still
-      // falls back to the pyproject mirror — the best-known version
-      // when the server can't say anything (VERSION is a top-level
-      // const; versionInfo is scoped to the .then above, so look it
-      // up again here).
-      const versionInfo = document.getElementById("version-info");
-      if (versionInfo) versionInfo.textContent = "session-timer " + VERSION;
+      /* no banner: message + version stay hidden, warning stays visible */
     });
 
   // ------------------------------------------- new-epoch popup

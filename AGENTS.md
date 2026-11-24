@@ -129,10 +129,11 @@ Phases 1–4 are implemented and verified:
   `git describe --tags --dirty --always` (plus the existing `GIT_HASH`
   sha) as Docker build args → `SESSION_TIMER_GIT_VERSION`/`_HASH` env →
   `config.GIT_VERSION`/`GIT_HASH` → `GET /api/banner`
-  (`{message, git_version, git_hash}`) → the ☰ menu line
+  (`{message, git_version, git_hash, persisted}`) → the ☰ menu line
   ("session-timer 0.2.0-3-g943694e"; exact-tag builds show
-  "0.2.0 (abc1234)", unstamped builds fall back to the pyproject mirror
-  `VERSION` const in admin.js).  Also the OCI label
+  "0.2.0 (abc1234)", unstamped builds fall back server-side to the
+  installed package metadata / pyproject.toml — no client-side
+  mirror).  Also the OCI label
   org.opencontainers.image.version.  Release flow: commit, tag
   (`0.2.0` — bare version, matching the actual tag), push — commits past the tag self-describe in every later
   image.
