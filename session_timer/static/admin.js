@@ -409,6 +409,40 @@
     }
   }
 
+  // Duration column: shown/entered in MINUTES (display only — the wire
+  // format stays seconds, as does everything server-side).  A whole
+  // number of minutes renders as "10"; anything with leftover seconds
+  // renders as "10:30" (mm:ss, like a stopwatch).  Entry accepts the
+  // same two shapes (10 or 10:30) plus decimals (10.5 → 10:30); the
+  // parsed value is rounded back to seconds and validated there.
+  function fmtDurationMinutes(durationSeconds) {
+    const total = Math.max(0, Math.round(durationSeconds));
+    const minutes = Math.floor(total / 60);
+    const seconds = total % 60;
+    return seconds === 0 ? String(minutes) : minutes + ":" + String(seconds).padStart(2, "0");
+  }
+
+  /** "10" | "10:30" | "10.5" | "10,5" -> seconds, or null when the
+      text is not a positive duration.  Decimals are fractional
+      minutes; the colon form is mm:ss (seconds, not hundredths), with
+      ss capped at 59 (10:75 is a typo, not 11:15). */
+  function parseDurationMinutes(text) {
+    const trimmed = String(text).trim().replace(",", ".");
+    const colon = trimmed.match(/^(\d+):(\d{1,2})$/);
+    if (colon) {
+      if (parseInt(colon[2], 10) > 59) return null; // 10:75 is a typo
+      const seconds = parseInt(colon[1], 10) * 60 + parseInt(colon[2], 10);
+      return seconds > 0 ? seconds : null;
+    }
+    if (/^\d+$/.test(trimmed)) {
+      const seconds = parseInt(trimmed, 10) * 60;
+      return seconds > 0 ? seconds : null;
+    }
+    const minutes = parseFloat(trimmed);
+    if (!Number.isFinite(minutes) || minutes <= 0) return null;
+    return Math.round(minutes * 60);
+  }
+
   function renderTable() {
     const focus = captureFocus();
     const events = sortedEvents();
@@ -424,7 +458,9 @@
       tr.appendChild(
         makeInput(ev, "start_time", ST.fmtServiceTime(ev.start_time), "text", 60)
       );
-      tr.appendChild(makeInput(ev, "duration", String(ev.duration), "number", 60));
+      tr.appendChild(
+        makeInput(ev, "duration", fmtDurationMinutes(ev.duration), "text", 60)
+      );
       tr.appendChild(makeReadonlyCell(ST.fmtServiceTime(ev.start_time + ev.duration)));
       tr.appendChild(makeGapCell(ev, events[i + 1] || null));
       tr.appendChild(makeRemainingCell());
@@ -452,7 +488,11 @@
     input.dataset.field = field;
     if (field === "name") input.maxLength = 128; // server enforces too
     if (field === "start_time") input.placeholder = "HH:MM";
-    if (field === "duration") input.min = "1";
+    if (field === "duration") {
+      input.placeholder = "minutes";
+      input.title = "Duration in minutes — whole minutes (10), mm:ss (10:30), or decimal (10.5 = 10 min 30 s)";
+      input.inputMode = "decimal";
+    }
     input.addEventListener("change", () => commitInput(ev.id, field, input));
     td.appendChild(input);
     if (step !== undefined) td.appendChild(makeStepButtons(ev, field, step));
@@ -483,9 +523,9 @@
         }
         await mutate("/events/" + eid, "PATCH", { start_time: daySecs });
       } else if (field === "duration") {
-        const duration = parseInt(input.value, 10);
-        if (!Number.isFinite(duration) || duration <= 0) {
-          error("Duration must be positive");
+        const duration = parseDurationMinutes(input.value);
+        if (duration === null) {
+          error("Invalid duration — use minutes (10), mm:ss (10:30), or decimal (10.5)");
           renderTable();
           return;
         }
@@ -541,7 +581,7 @@
       const btn = document.createElement("button");
       btn.textContent = label;
       btn.title =
-        (delta > 0 ? "Increase " : "Decrease ") + field + " by " + step + "s";
+        (delta > 0 ? "Increase " : "Decrease ") + field + " by " + step / 60 + " min";
       btn.addEventListener("click", () => {
         guard(() =>
           mutate("/events/" + ev.id + "/shift", "POST", {
