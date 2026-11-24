@@ -13,7 +13,16 @@
   <button id="fullscreen" title="Toggle fullscreen (Esc also exits)">⛶</button>
   <button id="font-bigger" title="Larger countdown text">+</button>
   <button id="clock-toggle" title="Toggle the small clock (this screen only)">⏱</button>
-  <button id="wake-lock" title="Keep the screen on (wake lock; remembered for this screen)" aria-pressed="false">⊙</button>
+  <!-- Bulb drawn from primitives, original to this repo (no copied
+       icon data): a <circle> for the glass, centered (12,9) r=6, and
+       two inset <line>s for the screw base — y=18 spanning x 9..15,
+       y=21 spanning x 10..14, everything symmetric about x=12.  The
+       strokes inherit the button color (stroke: currentColor, see
+       #wake-lock svg in style.css), so the icon renders white on the
+       dark cluster and black when .on inverts the button.  (Unicode
+       has no monochrome bulb: 💡 is emoji-only, and the power symbol
+       ⏻ reads as a switch, not a light.) -->
+  <button id="wake-lock" title="Keep the screen on while viewing (wake lock; tap again to release)" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="6"/><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="21" x2="14" y2="21"/></svg></button>
   <button id="dim-darker" title="Dim the screen (synced to all panels)">☾</button>
   <button id="dim-lighter" title="Brighten the screen (synced to all panels)">☀</button>
 </div>

@@ -197,8 +197,23 @@ body.display #wake-status[hidden] {
   cursor: default;
 }
 
+/* Wake-lock bulb (inline SVG in display.html, drawn from primitives
+   there — no copied icon data): strokes inherit the button color, so
+   the icon is monochrome by construction — white on the dark cluster,
+   black when .on inverts the button. */
+#wake-lock svg {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.12em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 /* Active wake-lock button: inverted, still strictly black/white (the
-   glyph is ⊙, a text-style symbol — no color emoji). */
+   bulb's strokes follow currentColor — see display.html). */
 #display-controls button.on {
   background: #fff;
   color: #000;
@@ -222,7 +237,8 @@ body.display #wake-status[hidden] {
 }
 
 @media (pointer: coarse) {
-  #display-controls button {
+  #display-controls button,
+  #wake-status {
     padding: 0.4rem 0.9rem;
   }
 }

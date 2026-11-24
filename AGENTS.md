@@ -134,17 +134,19 @@ Phases 1–4 are implemented and verified:
   "0.2.0 (abc1234)", unstamped builds fall back to the pyproject mirror
   `VERSION` const in admin.js).  Also the OCI label
   org.opencontainers.image.version.  Release flow: commit, tag
-  (`v0.2.0`), push — commits past the tag self-describe in every later
+  (`0.2.0` — bare version, matching the actual tag), push — commits past the tag self-describe in every later
   image.
-- Display-page wake lock (opt-in ⊙ button in the controls cluster +
+- Display-page wake lock (opt-in bulb button, an original
+  primitives-only SVG, in the controls cluster +
   an always-visible "screen stays on" badge under the clock, tappable
   to release): Screen Wake Lock API so a phone/tablet left on a desk
-  does not auto-lock mid-session.  Preference persisted per browser
-  (localStorage, like the clock); both controls reflect whether the
-  lock is *actually* held (release event + visibilitychange
-  re-acquire per the documented pattern; the restored preference
-  retries on the first pointerdown, since the initial request lacks
-  user activation); hidden when the API is missing (old browsers) and
+  does not auto-lock mid-session.  Deliberately no re-acquire and no
+  persistence: the lock is held exactly from an explicit tap until it
+  is lost (tab hidden, screen off, OS policy) — any release only
+  updates the UI (the sentinel's release event), so the badge is the
+  visible tell and one tap re-engages; both controls reflect whether
+  the lock is *actually* held; hidden when the API is missing (old
+  browsers) and
   skipped entirely in the admin preview embed (must not keep the
   admin's own screen awake).  No server changes.  Support:
   Chrome/Edge 84+, Firefox 126+, Safari/iOS 16.4+ (~96% global).
@@ -420,7 +422,14 @@ Clients send their known `generation` in the request (header
   (edit state via second window while first is mid-request), display
   color thresholds (use a 1-minute event), flash behavior after expiry,
   auto-advance to next event, CSV round-trip, nonexistent session on
-  display = blank, admin edits create the session.
+  display = blank, admin edits create the session.  On a real phone,
+  the wake lock: tap the bulb and set the OS screen timeout to 30 s —
+  the display must survive it; background the app and confirm the
+  "screen stays on" badge disappears while away and STAYS gone on
+  return — the screen now follows the OS timeout again; tap the bulb
+  to re-engage; tap the badge to release while viewing; the cluster
+  bulb inverts (black on white) while the lock is held; a browser
+  without the API hides the bulb button entirely.
 
 ## Conventions / constraints
 

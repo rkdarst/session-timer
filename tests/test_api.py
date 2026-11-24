@@ -531,6 +531,23 @@ def test_banner_includes_git_hash(client, monkeypatch):
     assert data["git_hash"] == "abc1234567890"
 
 
+def test_admin_js_version_mirror_matches_pyproject():
+    """The ☰ menu's fallback version: admin.js carries a manual mirror of
+    pyproject's version, used only when the server has no git-stamped
+    version (plain uvicorn run, no Docker build args).  Nothing keeps
+    the two in sync at runtime, so guard the mirror against drift."""
+    import re
+    import tomllib
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    expected = tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"]
+    js = (root / "session_timer" / "static" / "admin.js").read_text()
+    match = re.search(r'^const VERSION = "([^"]+)"', js, re.M)
+    assert match, "VERSION const not found in admin.js"
+    assert match.group(1) == expected
+
+
 def test_websocket_initial_state_and_push(client):
     with client.websocket_connect(f"/api/{NAME}/ws") as ws:
         initial = ws.receive_json()

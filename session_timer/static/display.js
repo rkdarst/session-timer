@@ -330,29 +330,18 @@
   // ------------------------------------ wake lock (keep the screen on)
   // Opt-in Screen Wake Lock for a phone/tablet propped up at the talk
   // (or left on a desk): the screen does not auto-lock while the timer
-  // is shown.  Per-browser preference, remembered like the clock.  The
-  // API's lifecycle is reflected truthfully in the UI: the initial
-  // request needs a user gesture (the button click), the lock is
-  // auto-released whenever the tab is hidden (screen off, app switch)
-  // and re-requested on return (no new gesture needed, per the
-  // documented visibility pattern), and the OS/browser can release it
-  // at any time (the "release" event) — so both buttons always show
-  // whether the lock is actually held, never just the last click.
-  // Unsupported (old browsers) or policy-denied: the button hides /
-  // the state reads off; nothing crashes.  The admin preview (embed)
-  // skips all of it: its iframe must not keep the admin's own screen
-  // awake.  No server involvement.
-  const WAKE_KEY = "session-timer:wake-lock";
-
-  function loadWakeDesired() {
-    if (embed) return false;
-    try {
-      return window.localStorage.getItem(WAKE_KEY) === "1";
-    } catch (err) {
-      return false; // localStorage unavailable (privacy mode etc.)
-    }
-  }
-  let wakeDesired = loadWakeDesired();
+  // is shown.  Deliberately simple and OS-deferring: the lock exists
+  // exactly from an explicit tap until it is lost — tapping the bulb
+  // (or the badge) requests it, tapping again releases it, and ANY
+  // release — the tab being hidden (screen off, app switch), the OS
+  // taking it back, or a policy denial — only updates the UI.  Nothing
+  // re-acquires behind the user's back: if the page is left and
+  // returned to, the lock is gone (the "screen stays on" badge, shown
+  // only while the lock is held, is the visible tell) and one tap
+  // re-engages it.  Unsupported (old browsers): the button hides
+  // entirely; the admin preview (embed) skips all of it — its iframe
+  // must not keep the admin's own screen awake.  No server
+  // involvement.
   let wakeSentinel = null;
 
   function applyWakeUi() {
@@ -363,24 +352,7 @@
     wakeStatusBtn.setAttribute("aria-pressed", String(on));
   }
 
-  async function requestWakeLock() {
-    if (embed || !wakeDesired || !("wakeLock" in navigator)) return;
-    try {
-      wakeSentinel = await navigator.wakeLock.request("screen");
-      wakeSentinel.addEventListener("release", () => {
-        // Fires on auto-release (tab hidden, OS policy) and after our
-        // own release(); wakeDesired is kept so the visibilitychange
-        // handler below can re-acquire when the tab returns.
-        wakeSentinel = null;
-        applyWakeUi();
-      });
-    } catch (err) {
-      wakeSentinel = null; // denied/throttled: the UI shows the truth
-    }
-    applyWakeUi();
-  }
-
-  async function releaseWakeLock() {
+  async function toggleWakeLock() {
     if (wakeSentinel) {
       try {
         await wakeSentinel.release();
@@ -388,55 +360,32 @@
         /* already released */
       }
       wakeSentinel = null;
-    }
-    applyWakeUi();
-  }
-
-  async function toggleWakeLock() {
-    wakeDesired = !wakeDesired;
-    if (!embed) {
+    } else if (!embed && "wakeLock" in navigator) {
       try {
-        window.localStorage.setItem(WAKE_KEY, wakeDesired ? "1" : "0");
+        wakeSentinel = await navigator.wakeLock.request("screen");
+        wakeSentinel.addEventListener("release", () => {
+          // Fires for every loss: the tab being hidden (screen off,
+          // app switch), the OS taking the lock back, or release().
+          // UI-only — the lock is deliberately not re-acquired (see
+          // the comment above).
+          wakeSentinel = null;
+          applyWakeUi();
+        });
       } catch (err) {
-        /* non-fatal: the preference just won't persist */
+        wakeSentinel = null; // denied/throttled: the UI shows the truth
       }
     }
-    if (wakeDesired) {
-      await requestWakeLock();
-    } else {
-      await releaseWakeLock();
-    }
+    applyWakeUi();
   }
 
   wakeLockBtn.addEventListener("click", toggleWakeLock);
   wakeStatusBtn.addEventListener("click", toggleWakeLock);
 
-  // Re-acquire after the browser's automatic release (returning to the
-  // tab does not require a fresh user gesture).
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && wakeDesired && wakeSentinel === null) {
-      requestWakeLock();
-    }
-  });
-
   if (embed || !("wakeLock" in navigator)) {
     // The admin preview or an old browser: no wake-lock controls.
     wakeLockBtn.hidden = true;
-    applyWakeUi();
-  } else if (wakeDesired) {
-    // Restored preference: this initial request usually lacks the
-    // user activation the API requires, so try it and also retry on
-    // the first interaction anywhere.
-    requestWakeLock();
-    const acquireOnGesture = () => {
-      document.removeEventListener("pointerdown", acquireOnGesture);
-      if (wakeDesired && wakeSentinel === null) requestWakeLock();
-    };
-    document.addEventListener("pointerdown", acquireOnGesture);
-    applyWakeUi();
-  } else {
-    applyWakeUi();
   }
+  applyWakeUi();
 
   /** Set the rendered size and button states from fontIndex; called by
       render() on every tick so the fit cap tracks the current text. */
