@@ -1,5 +1,11 @@
 "use strict";
 
+/* Fallback version (pyproject.toml, mirrored here): used for the ☰
+   menu's version line only when /api/banner has no git-stamped
+   version (plain uvicorn run, no Docker build args); the server's
+   `git describe` version wins when present. */
+const VERSION = "0.2.0";
+
 (function () {
   const name = ST.sessionName();
   const tbody = document.querySelector("#events-table tbody");
@@ -951,9 +957,18 @@
   // ---------------------------------------------- sysadmin message
 
   // SESSION_TIMER_MESSAGE (server environment): shown at the top of
-  // the yellow banner, above the data-loss warning.  Static per
+  // the yellow banner, above the data-loss text.  Static per
   // deployment (the server reads it at startup), so one fetch on load
-  // is enough; a failed fetch just leaves the message hidden.
+  // is enough; a failed fetch just leaves the message hidden.  The
+  // same response carries the build's git version + hash (Docker
+  // build args; "unknown" outside image builds), shown in the ☰ menu
+  // so a deployed instance can be tied to its exact source:
+  //   git version = `git describe --tags --dirty --always` — "0.2.0"
+  //   on a release tag, "0.2.0-3-g943694e" past it, "-dirty" appended
+  //   when the build tree had uncommitted changes — which answers
+  //   "is this build actually the released version?"  The full sha is
+  //   the unambiguous companion.  When both are "unknown" (plain
+  //   uvicorn run) only the static pyproject version is shown.
   fetch("/api/banner")
     .then((r) => r.json())
     .then((cfg) => {
@@ -963,9 +978,38 @@
         sysadminMessage.hidden = false;
         updateWarnBanner();
       }
+      const versionInfo = document.getElementById("version-info");
+      if (versionInfo) {
+        // Prefer the described git version (it already encodes
+        // tag-distance + dirty state); fall back to the pyproject
+        // version when the build didn't stamp it.
+        const gv =
+          cfg && typeof cfg.git_version === "string" && cfg.git_version !== "unknown"
+            ? cfg.git_version
+            : null;
+        const gh =
+          cfg && typeof cfg.git_hash === "string" && cfg.git_hash !== "unknown"
+            ? cfg.git_hash.slice(0, 7)
+            : null;
+        // gv contains the short node when past a tag; only append the
+        // hash when the version doesn't already carry one (a tag or
+        // sha-only fallback).
+        const describeHasNode = gv && /-g[0-9a-f]+$/.test(gv);
+        const parts = [gv || VERSION];
+        if (gh && (!gv || !describeHasNode)) parts.push(gh);
+        versionInfo.textContent = "session-timer " + parts.join(" (") +
+          ")".repeat(parts.length - 1);
+      }
     })
     .catch(() => {
-      /* no message available; stay hidden */
+      // No banner response at all (server unreachable / mid-restart):
+      // the sysadmin message stays hidden, but the version line still
+      // falls back to the pyproject mirror — the best-known version
+      // when the server can't say anything (VERSION is a top-level
+      // const; versionInfo is scoped to the .then above, so look it
+      // up again here).
+      const versionInfo = document.getElementById("version-info");
+      if (versionInfo) versionInfo.textContent = "session-timer " + VERSION;
     });
 
   // ------------------------------------------- new-epoch popup

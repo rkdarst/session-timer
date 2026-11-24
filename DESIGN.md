@@ -159,6 +159,18 @@ start (restart to change), stripped and capped at 512 characters, and
 fetched once per page load from `GET /api/banner`; unset or empty means
 no message.  The display page is not affected.
 
+The same `GET /api/banner` response also carries the **build
+identification**: `git_version` and `git_hash` come from the Docker
+build args `GIT_VERSION` / `GIT_HASH` (CI passes
+`git describe --tags --dirty --always` and the full commit sha; local
+builds and plain `uvicorn` runs get "unknown").  The admin ☰ menu
+shows them as e.g. "session-timer 0.2.0-3-g943694e" — exactly `0.2.0`
+only when built from the tagged commit with a clean tree, `-N-g<sha>`
+for N commits past the newest tag, `-dirty` appended for uncommitted
+changes — so a deployed instance can be tied to its exact source.
+Release flow: commit, tag (`git tag v0.2.0`), push; every later build
+self-describes its distance from that tag.
+
 The container liveness probe is a bare `/healthz` endpoint (an empty
 200 that reveals nothing about the sessions): unlike a static-asset
 probe it exercises the real request path — middleware, routing, the

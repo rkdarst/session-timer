@@ -369,14 +369,23 @@ async def persistence_info():
 
 @app.get("/api/banner")
 async def banner_message():
-    """Sysadmin message (SESSION_TIMER_MESSAGE) shown on the admin page.
+    """Sysadmin message (SESSION_TIMER_MESSAGE) shown on the admin page,
+    plus the build identification (git version + hash).
 
     Static per deployment: the text is read from the environment at
     import (``config.ADMIN_MESSAGE``, stripped and capped at 512
     characters); the empty string means "no message" and admin.js keeps
-    the bar hidden.  Read at request time so tests can monkeypatch it.
+    the bar hidden.  The version/hash come from the Docker build args
+    (GIT_VERSION = `git describe --tags --dirty --always`, GIT_HASH =
+    the full sha; "unknown" outside image builds).  All are read at
+    request time so tests can monkeypatch them; the admin page fetches
+    this once on load and shows the identifiers in the ☰ menu.
     """
-    return {"message": config.ADMIN_MESSAGE or ""}
+    return {
+        "message": config.ADMIN_MESSAGE or "",
+        "git_version": config.GIT_VERSION,
+        "git_hash": config.GIT_HASH,
+    }
 
 
 @app.get("/healthz", include_in_schema=False)

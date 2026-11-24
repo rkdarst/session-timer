@@ -25,6 +25,22 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # installs a real copy into the venv instead of a link back to the
 # build-context source.
 COPY session_timer/ ./session_timer/
+
+# The commit the image was built from (CI passes GIT_VERSION —
+# `git describe --tags --dirty --always`: "0.2.0" on a release tag,
+# "0.2.0-3-g943694e" past it, "-dirty" appended for uncommitted
+# changes — plus GIT_HASH, the full sha; both default to "unknown"
+# for local docker builds).  Exposed to the app via the environment
+# (config.GIT_VERSION/GIT_HASH -> /api/banner -> the admin ☰ menu) and
+# as OCI labels for `docker inspect`.  Kept AFTER the dependency
+# phase: a hash-only change re-runs only this cheap layer.
+ARG GIT_VERSION=unknown
+ARG GIT_HASH=unknown
+ENV SESSION_TIMER_GIT_VERSION=${GIT_VERSION} \
+    SESSION_TIMER_GIT_HASH=${GIT_HASH}
+LABEL org.opencontainers.image.revision=${GIT_HASH} \
+      org.opencontainers.image.version=${GIT_VERSION}
+
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable
 

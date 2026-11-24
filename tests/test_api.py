@@ -427,6 +427,7 @@ def test_pages_served(client):
         (f"/{NAME}/", "data-loss-warning"),
         (f"/{NAME}/", "show-help"),
         (f"/{NAME}/", "menu-btn"),
+        (f"/{NAME}/", "version-info"),
         (f"/{NAME}/", "set-timezone"),
         (f"/{NAME}/", "edit-cascade"),
         (f"/{NAME}/", "tz-indicator"),
@@ -503,13 +504,31 @@ def test_banner_endpoint(client, monkeypatch):
     # Unset (or empty) -> empty string; admin.js keeps the bar hidden.
     r = client.get("/api/banner")
     assert r.status_code == 200
-    assert r.json() == {"message": config.ADMIN_MESSAGE or ""}
+    assert r.json()["message"] == (config.ADMIN_MESSAGE or "")
 
     # When the operator sets SESSION_TIMER_MESSAGE (here: patched after
     # import, which the route reads at request time), the text is served
     # and admin.js shows it in the sysadmin banner.
     monkeypatch.setattr(config, "ADMIN_MESSAGE", "Maintenance tonight")
-    assert client.get("/api/banner").json() == {"message": "Maintenance tonight"}
+    assert client.get("/api/banner").json()["message"] == "Maintenance tonight"
+
+
+def test_banner_includes_git_hash(client, monkeypatch):
+    """The ☰ menu's version line: /api/banner carries the build's git
+    version (`git describe --tags --dirty --always`) and the full commit
+    hash (Docker build args, "unknown" outside image builds), read at
+    request time so tests can monkeypatch them."""
+    from session_timer import config
+
+    r = client.get("/api/banner")
+    assert r.status_code == 200
+    assert r.json()["git_version"] == config.GIT_VERSION  # "unknown" locally
+    assert r.json()["git_hash"] == config.GIT_HASH  # "unknown" locally
+    monkeypatch.setattr(config, "GIT_VERSION", "0.2.0-3-g943694e")
+    monkeypatch.setattr(config, "GIT_HASH", "abc1234567890")
+    data = client.get("/api/banner").json()
+    assert data["git_version"] == "0.2.0-3-g943694e"
+    assert data["git_hash"] == "abc1234567890"
 
 
 def test_websocket_initial_state_and_push(client):

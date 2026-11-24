@@ -68,3 +68,18 @@ PORT = 8000
 # requires a server restart.  Stripped and capped (a runaway value
 # would wreck the page layout); unset/empty -> None.
 ADMIN_MESSAGE = (os.environ.get("SESSION_TIMER_MESSAGE") or "").strip()[:512] or None
+
+# ----------------------------------------------- build identification
+# What source this image/run was built from.  CI passes both as Docker
+# build args (see the workflow + Dockerfile):
+#   SESSION_TIMER_GIT_VERSION — `git describe --tags --dirty --always`:
+#     "0.2.0" exactly on a release tag, "0.2.0-3-g943694e" N commits
+#     past it, "-dirty" appended when the build tree had uncommitted
+#     changes, or the short sha when no tag exists yet.
+#   SESSION_TIMER_GIT_HASH — the full commit sha.
+# Local runs and plain `uvicorn` get "unknown" for both.  Served by
+# /api/banner and shown in the admin ☰ menu so a deployed instance can
+# be tied to its exact source; also set as OCI labels
+# org.opencontainers.image.revision / .version on the image.
+GIT_VERSION = os.environ.get("SESSION_TIMER_GIT_VERSION") or "unknown"
+GIT_HASH = os.environ.get("SESSION_TIMER_GIT_HASH") or "unknown"

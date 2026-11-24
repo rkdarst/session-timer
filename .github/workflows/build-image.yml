@@ -19,7 +19,12 @@
 # Pull-request runs build and smoke-test but never push.
 #
 # It builds exactly what the Dockerfile in the pushed commit describes
-# (uv.lock-pinned dependencies).
+# (uv.lock-pinned dependencies).  The build receives GIT_VERSION
+# (git describe --tags --dirty --always: e.g. "0.2.0" on a release
+# tag, "0.2.0-3-g943694e" past it, "-dirty" appended for uncommitted
+# changes) and GIT_HASH (the full commit sha); both are shown in the
+# admin ☰ menu via /api/banner so a deployed instance can be tied to
+# its exact source.
 
 name: build-image
 
@@ -47,7 +52,13 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 — full history + tags, so `git describe --tags`
+      # below can name the newest release tag and count commits past it
+      # (the default shallow checkout would see no tags at all and fall
+      # back to a bare sha).
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       # Tests run in a uv-managed environment from the same uv.lock the
       # image uses.  The dev dependency-group (pytest + httpx for
@@ -60,6 +71,19 @@ jobs:
         run: |
           uv sync --frozen
           uv run --no-sync pytest -q
+
+      # Compute the version/commit identifiers for the image build:
+      # GIT_VERSION is `git describe --tags --dirty --always` ("0.2.0"
+      # on a release tag, "0.2.0-3-g943694e" past it, "-dirty" appended
+      # when the tree has uncommitted changes; --always falls back to
+      # the short sha in a fresh checkout with no tags yet).  GIT_HASH
+      # is the full commit sha.  Both ride into the image as build args
+      # (see the Dockerfile) and out to the admin ☰ menu via /api/banner.
+      - name: Compute version identifiers
+        id: meta
+        run: |
+          echo "version=$(git describe --tags --dirty --always)" >> "$GITHUB_OUTPUT"
+          echo "hash=${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
       # Dependency audit: check every package pinned in uv.lock against
       # the PyPA advisory database (CVE/GHSA).  Audits the runtime
@@ -98,6 +122,9 @@ jobs:
           context: .
           load: true
           tags: session-timer:latest
+          build-args: |
+            GIT_VERSION=${{ steps.meta.outputs.version }}
+            GIT_HASH=${{ steps.meta.outputs.hash }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -123,7 +150,19 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 — same reason as the test job's checkout: tags
+      # must be visible for `git describe --tags` below.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Same version identifiers as the test job's build (a fresh
+      # checkout of the same commit produces the same values).
+      - name: Compute version identifiers
+        id: meta
+        run: |
+          echo "version=$(git describe --tags --dirty --always)" >> "$GITHUB_OUTPUT"
+          echo "hash=${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
       # QEMU + binfmt lets the amd64 runner build the arm64 half of the
       # image (Pi 5 / 64-bit Raspberry Pi OS).  The first push creates
@@ -148,5 +187,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ghcr.io/rkdarst/session-timer:latest
+          build-args: |
+            GIT_VERSION=${{ steps.meta.outputs.version }}
+            GIT_HASH=${{ steps.meta.outputs.hash }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

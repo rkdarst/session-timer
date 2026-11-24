@@ -125,6 +125,17 @@ Phases 1–4 are implemented and verified:
   data-loss text — a sysadmin message keeps the banner up, and the box
   vanishes only when both texts are absent; display page unaffected;
   not dynamically updateable — restart to change).  Tests: 109 passing.
+- Tag-aware version strings: CI passes `GIT_VERSION` =
+  `git describe --tags --dirty --always` (plus the existing `GIT_HASH`
+  sha) as Docker build args → `SESSION_TIMER_GIT_VERSION`/`_HASH` env →
+  `config.GIT_VERSION`/`GIT_HASH` → `GET /api/banner`
+  (`{message, git_version, git_hash}`) → the ☰ menu line
+  ("session-timer 0.2.0-3-g943694e"; exact-tag builds show
+  "0.2.0 (abc1234)", unstamped builds fall back to the pyproject mirror
+  `VERSION` const in admin.js).  Also the OCI label
+  org.opencontainers.image.version.  Release flow: commit, tag
+  (`v0.2.0`), push — commits past the tag self-describe in every later
+  image.
 - Verified live with uvicorn: pages 200, 409 on stale generation, CSV
   round-trip, WebSocket initial state + push + ping/pong
 - Audit fixes (post-timezone-redesign): mutations validate the
@@ -177,7 +188,7 @@ Phases 1–4 are implemented and verified:
 Run it:
 
 ```
-~/.venvs/speaker-timer/bin/python -m uvicorn speaker_timer.main:app --port 8000
+.venv/bin/python -m uvicorn session_timer.main:app --port 8000
 ```
 
 ## Planned file layout

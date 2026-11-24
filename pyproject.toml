@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "session-timer"
-version = "0.1.0"
+version = "0.2.0"
 description = "Web-based session timer: admin sets events, display shows a countdown"
 readme = "DESIGN.md"
 requires-python = ">=3.10"
