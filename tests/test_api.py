@@ -421,6 +421,7 @@ def test_pages_served(client):
         (f"/{NAME}/", "edit-cascade"),
         (f"/{NAME}/", "tz-indicator"),
         (f"/{NAME}/", "event-now-menu"),
+        (f"/{NAME}/", "new-session-modal"),
         (f"/{NAME}/", 'id="clock"'),
         (f"/{NAME}/", ">Speaker view</a>"),  # toolbar link (was menu item)
         (f"/{NAME}/", "config.js"),

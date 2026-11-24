@@ -87,6 +87,28 @@ Phases 1–4 are implemented and verified:
   CSS variables (--timer-green/yellow/red, set to ~45%-lightened
   variants of the shared colors so the numbers are a lot softer than
   the fully saturated bars).
+- Session recovery: the admin page latches the last real state (gen
+  !== null).  Server comes back empty (gen null) while latched →
+  auto-restore (stamp tz → CSV replace at the fresh generation → dim
+  re-apply → notice); server comes back with a RE-CREATED session
+  (generation rewound below the latch, or timezone re-stamped — a new
+  epoch) → popup offering to download the latched copy as CSV, then
+  Continue adopts it.  Generations are compared only for the rewind
+  check — never across a restore (the post-restore generation is
+  legitimately lower, and clients adopt rather than compare).  Guards:
+  restoring/epochHandled flags prevent re-trigger loops; popup adopts
+  the latest pending state on Continue and RE-ARMS epoch handling
+  (epochHandled = false), so a loss after adopting still restores.
+  Mutations (mutate()/CSV upload) await the in-flight restore — an
+  edit clicked during the silent restore window goes out with the
+  post-restore generation instead of racing the CSV PUT and 409ing
+  ("state changed" dead-end); a failed restore no longer leaks
+  restoring=true (which silently disabled recovery for the page's
+  life).  Verified by tests/js/test_recovery.mjs — a node harness
+  driving the real admin.js through the scenarios (restore, in-flight
+  dedup, re-arm, popup, adopt, fresh URL, mutate-during-restore);
+  the latch lives only in page memory — a page (re)loaded after
+  the restart has nothing to restore, by design.
 - Mobile polish, deliberately small: the admin's events table
   scrolls horizontally in an `.table-wrap` (overflow-x: auto + table
   min-width 48rem) instead of squishing — no responsive redesign, the

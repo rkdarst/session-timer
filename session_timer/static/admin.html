@@ -23,6 +23,7 @@
 
 <div class="toolbar">
   <span id="clock" class="toolbar-clock"></span>
+  <span id="conn" class="conn-dot" hidden title="Live — updates pushed over WebSocket"></span>
   <button id="add-event">Add event</button>
   <div class="dropdown">
     <button id="event-now" title="Create an event starting at the current minute">Event now ▾</button>
@@ -138,6 +139,15 @@
     <h2>Raw state (as seen by this client)</h2>
     <pre id="state-json"></pre>
     <button id="state-close">Close</button>
+  </div>
+</div>
+
+<div id="new-session-modal" hidden>
+  <div class="help-box">
+    <h2>This session changed while you were away</h2>
+    <p id="new-session-text"></p>
+    <button id="new-session-download">Download my previous copy (CSV)</button>
+    <button id="new-session-continue">Continue</button>
   </div>
 </div>
 

@@ -90,6 +90,19 @@ Allows one to view the events in the session and modify them.  There are control
   start_time as `H:MM:SS` time of day; starts at or past 24:00:00 are
   rejected on upload — sessions cannot span midnight)
 * Upload events as csv (replacing all current)
+* Session recovery (restart without snapshots): the admin page latches
+  the last real session state; if the server comes back EMPTY
+  (generation null), the page automatically re-creates the session from
+  the latch (timezone, all events, dim level) and shows a notice.  If
+  the server instead has a re-created session — detected by the
+  generation rewinding below the latch or the timezone being
+  re-stamped — a popup offers to download the latched copy as CSV;
+  continuing adopts the server's version (and re-arms recovery, so a
+  later loss still restores).  Edits made while the restore runs are
+  applied after it completes (they would otherwise race the restore
+  with a stale generation).  The latch lives only in the open page:
+  a browser tab (re)loaded after the server restart has nothing to
+  restore.
 * Link to the display page and a QR-code popup with the display URL
   (so a phone can be pointed at the display).
 * Live preview of the display page in the admin toolbar: a tiny

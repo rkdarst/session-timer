@@ -21,6 +21,16 @@
   let stale = false;
   let timezoneEnsured = false;
 
+  // Recovery latch: the last REAL session state (generation !== null)
+  // this page saw — the copy used to restore the session after a server
+  // restart, or to download it if the server re-created a different
+  // one.  See onState / restoreFromLatch.
+  let latch = null;
+  let restoring = false;     // a restore is in flight
+  let restoreInFlight = null; // its promise — mutations await it (no gen race)
+  let epochHandled = false;  // this latch's epoch was already handled
+  let pendingSession = null; // server state awaiting popup adoption
+
   if (!ST.validName(name)) {
     errorBanner.textContent = "Invalid session URL";
     errorBanner.hidden = false;
@@ -86,6 +96,10 @@
       and its response carries the bumped generation the real mutation
       then uses — awaiting the stamp is what keeps that race-free. */
   async function mutate(path, method, body) {
+    // An in-flight restore commits the latched schedule (bumping the
+    // generation) — wait for it, or this mutation goes out with the
+    // pre-restore generation and 409s.
+    if (restoreInFlight) await restoreInFlight;
     if (state.timezone == null) await stampTimezone();
     return ST.mutate(name, path, method, body, generationForRequest()).then((data) => {
       if (data && data.generation !== null && data.generation !== undefined) {
@@ -99,8 +113,38 @@
   }
 
   function onState(data) {
-    state = data;
     ST.noteServerTime(data.server_time);
+    if (!restoring) {
+      const real = data.generation !== null && data.generation !== undefined;
+      if (real) {
+        if (
+          latch &&
+          !epochHandled &&
+          (data.generation < latch.generation ||
+            data.timezone !== latch.timezone)
+        ) {
+          // New epoch: the session was re-created while this page was
+          // away (the server's generation rewound below the latch, or
+          // the timezone was re-stamped).  The latch may hold the only
+          // copy of the old events — offer to download it.
+          epochHandled = true;
+          pendingSession = data;
+          showNewSessionModal();
+        } else if (!epochHandled) {
+          latch = latchSnapshot(data);
+        } else if (pendingSession) {
+          pendingSession = data; // keep the popup's adopt-target current
+        }
+      } else if (latch && !epochHandled) {
+        // The server has no session while this page holds one: it was
+        // lost (restart without snapshots) — restore it.
+        epochHandled = true;
+        restoreFromLatch();
+      }
+      // (Otherwise: a fresh URL never latched anything, or this latch's
+      // epoch was already handled.)
+    }
+    state = data;
     if (data.generation !== null && data.generation !== undefined) {
       stale = false;
       staleBanner.hidden = true;
@@ -112,6 +156,102 @@
     updateDimButtons();
     updateTzIndicator();
     renderTable();
+  }
+
+  function latchSnapshot(data) {
+    return {
+      events: data.events.map((e) => ({ ...e })),
+      timezone: data.timezone,
+      dim_level: data.dim_level,
+      generation: data.generation,
+    };
+  }
+
+  /** Serialize events to the server's CSV shape (matches GET
+      /events.csv: start H:MM[:SS], duration seconds, name). */
+  function csvFromEvents(events) {
+    const esc = (v) =>
+      /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+    const rows = events.map(
+      (e) =>
+        ST.fmtServiceTime(e.start_time) + "," + e.duration + "," + esc(e.name || "")
+    );
+    return "start_time,duration_sec,name\n" + rows.join("\n") + "\n";
+  }
+
+  /** The server lost the session (empty state while this page held a
+      latched one): re-create it — timezone first (creates the session;
+      generation 0 → 1), then all latched events via CSV replace with
+      the fresh generation, then the dim level.  A visible notice says
+      what happened; on failure the epoch stays handled (no retry
+      loop) and the latch is kept.  The in-flight promise is returned
+      so mutations can wait for the restore to commit instead of
+      racing it with a pre-restore generation (which 409s). */
+  function restoreFromLatch() {
+    restoring = true;
+    restoreInFlight = (async () => {
+      try {
+        const stampData = await stampTimezone();
+        const gen =
+          stampData &&
+          stampData.generation !== null &&
+          stampData.generation !== undefined
+            ? stampData.generation
+            : 0;
+        const resp = await fetch(
+          "/api/" + encodeURIComponent(name) + "/events.csv",
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "text/csv",
+              "X-Generation": String(gen),
+            },
+            body: csvFromEvents(latch.events),
+          }
+        );
+        if (!resp.ok) {
+          let message = resp.statusText;
+          try {
+            message = (await resp.json()).detail || message;
+          } catch (err) {
+            /* keep statusText */
+          }
+          error("Restore failed: " + message);
+          return;
+        }
+        const restored = await resp.json();
+        if (latch.dim_level) {
+          fetch(ST.apiUrl(name, "/dim"), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ level: latch.dim_level }),
+          }).catch(() => {});
+        }
+        error(
+          "Server restart detected — " +
+            (latch.events.length
+              ? "restored " + latch.events.length + " event(s) from this browser."
+              : "session restored (no events to restore).")
+        );
+        // Re-arm epoch handling and drop the in-flight flags BEFORE
+        // applying the restored state, so onState re-latches it and a
+        // later loss restores again.
+        epochHandled = false;
+        restoring = false;
+        restoreInFlight = null;
+        onState(restored);
+      } catch (err) {
+        error("Restore failed: " + (err.message || err));
+      } finally {
+        // Every exit path — a failed CSV PUT included — must unblock
+        // mutations and future restores.  (The old code returned early
+        // on failure with restoring still true, which silently disabled
+        // recovery for the rest of the page's life.)
+        restoring = false;
+        restoreInFlight = null;
+      }
+    })();
+    return restoreInFlight;
   }
 
   // ------------------------------------------------------ timezone
@@ -788,6 +928,54 @@
       /* no message available; stay hidden */
     });
 
+  // ------------------------------------------- new-epoch popup
+  // The server's session was re-created while this page was away (see
+  // onState's epoch detection): the latched copy may be the only
+  // surviving version of the old events.  Download is repeatable;
+  // Continue adopts the server's version as the new latch (and re-arms
+  // epoch handling, so a later loss still restores).
+
+  const newSessionModal = document.getElementById("new-session-modal");
+  const newSessionText = document.getElementById("new-session-text");
+  const newSessionDownload = document.getElementById("new-session-download");
+  const newSessionContinue = document.getElementById("new-session-continue");
+
+  function showNewSessionModal() {
+    const had = latch.events.length + " event(s)";
+    const now = pendingSession.events.length + " event(s)";
+    newSessionText.textContent =
+      "The server now has " +
+      now +
+      "; your browser still holds the previous version (" +
+      had +
+      "). Download it if you need it — continuing adopts the server's version.";
+    newSessionModal.hidden = false;
+  }
+
+  function downloadLatch() {
+    const blob = new Blob([csvFromEvents(latch.events)], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name + "-recovered.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  newSessionDownload.addEventListener("click", downloadLatch);
+  newSessionContinue.addEventListener("click", () => {
+    newSessionModal.hidden = true;
+    if (pendingSession) {
+      // Adopt the server's version as the new latch and RE-ARM epoch
+      // handling: the immediate onState() sees an identical state (no
+      // re-trigger), and a later server loss restores from the adopted
+      // copy just like any other latch.
+      latch = latchSnapshot(pendingSession);
+      epochHandled = false;
+      onState(pendingSession);
+    }
+  });
+
   // ------------------------------------------------- help popup
 
   const helpModal = document.getElementById("help-modal");
@@ -901,6 +1089,9 @@
     }
     const text = await file.text();
     guard(async () => {
+      // Same serialization as mutate(): never race an in-flight
+      // restore with a pre-restore generation.
+      if (restoreInFlight) await restoreInFlight;
       const resp = await fetch("/api/" + encodeURIComponent(name) + "/events.csv", {
         method: "PUT",
         headers: {
