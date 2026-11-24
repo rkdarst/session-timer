@@ -562,19 +562,15 @@ class SessionStore:
     def get_or_create(self, name: str) -> Session:
         """Existing session, or a new empty one (admin path).
 
-        Enforces ``config.MAX_SESSIONS``: an immediate expiry pass frees
-        long-idle slots first, then sessions idle beyond
-        ``config.SESSION_EVICTION_IDLE_SECONDS`` are evicted oldest-first;
-        if the store is still full, creation is refused (an active
-        session is never evicted).
+        Enforces ``config.MAX_SESSIONS``: when the cap is hit, sessions
+        idle beyond ``config.SESSION_EVICTION_IDLE_SECONDS`` are evicted
+        oldest-first; if that frees no slot, creation is refused (an
+        active session is never evicted).
         """
         session = self.sessions.get(name)
         if session is not None:
             return session
         if len(self.sessions) >= config.MAX_SESSIONS:
-            # Free obviously-stale slots first (also refreshes the set
-            # we are about to scan for eviction candidates).
-            self.expire(config.SESSION_EXPIRY_SECONDS)
             cutoff = time.time() - config.SESSION_EVICTION_IDLE_SECONDS
             idle = sorted(
                 (s for s in self.sessions.values() if s.last_used <= cutoff),
@@ -596,7 +592,7 @@ class SessionStore:
         """Cheap change marker: names + generations of all sessions.
 
         Every state change bumps some session's generation, and
-        expiry/eviction change the key set, so comparing fingerprints
+        eviction changes the key set, so comparing fingerprints
         tells whether the store changed since the last snapshot.
         (``last_used`` updates do not count — snapshotting them up to
         one interval late is harmless.)
@@ -605,19 +601,6 @@ class SessionStore:
             (name, session.generation, session.dim_level)
             for name, session in self.sessions.items()
         )
-
-    def expire(self, max_age_seconds: float, now: float | None = None) -> list[str]:
-        """Drop sessions unused for ``max_age_seconds``; returns names."""
-        if now is None:
-            now = time.time()
-        expired = [
-            name
-            for name, session in self.sessions.items()
-            if now - session.last_used > max_age_seconds
-        ]
-        for name in expired:
-            del self.sessions[name]
-        return expired
 
     # ------------------------------------- snapshot persistence (opt-in)
 

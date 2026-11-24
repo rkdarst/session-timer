@@ -64,27 +64,18 @@ async def lifespan(_: FastAPI):
             _snapshot_path,
             len(store.sessions),
         )
-    expiry_task = asyncio.create_task(_expiry_loop())
     snapshot_task = (
         asyncio.create_task(_snapshot_loop()) if _snapshot_path is not None else None
     )
     try:
         yield
     finally:
-        expiry_task.cancel()
         if snapshot_task is not None:
             snapshot_task.cancel()
         # Graceful shutdown (SIGTERM): capture everything, including
         # last_used drift since the last timer tick.
         if _snapshot_path is not None:
             await _save_snapshot()
-
-
-async def _expiry_loop() -> None:
-    """Periodically drop idle sessions (in-memory expiry per DESIGN.md)."""
-    while True:
-        await asyncio.sleep(3600)
-        store.expire(config.SESSION_EXPIRY_SECONDS)
 
 
 async def _snapshot_loop() -> None:
@@ -688,16 +679,9 @@ async def get_events_csv(name: str):
 async def put_events_csv(
     name: str, request: Request, x_generation: Annotated[int, Header()]
 ):
-    limit = config.MAX_CSV_UPLOAD_BYTES
-    detail = f"CSV upload too large (limit {limit} bytes)"
-    declared = request.headers.get("content-length", "")
-    if declared.isdigit() and int(declared) > limit:
-        raise HTTPException(status_code=413, detail=detail)
-    raw = await request.body()
-    if len(raw) > limit:
-        # Chunked requests without Content-Length are bounded only here.
-        raise HTTPException(status_code=413, detail=detail)
-    text = raw.decode("utf-8", errors="replace")
+    # Body size is already capped by the request_body_cap middleware for
+    # every /api/ route (declared and actual length, chunked-safe).
+    text = (await request.body()).decode("utf-8", errors="replace")
     # Upload *replaces* all events (per DESIGN.md).
     session, _ = run_mutation(name, x_generation, lambda s: s.replace_from_csv(text))
     return await broadcast_state(name, session)

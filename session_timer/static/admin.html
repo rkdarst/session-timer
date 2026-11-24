@@ -127,8 +127,9 @@
         to <i>every</i> panel &mdash; handy from the admin screen when the
         room lights go down.</li>
       <li><b>Data is memory-only.</b> Lost on server restart unless the
-        operator enabled snapshots, and idle sessions expire after 31
-        days &mdash; download a CSV to be safe.</li>
+        operator enabled snapshots, and sessions make room for new ones
+        only once the session cap fills (idlest evicted first) &mdash;
+        download a CSV to be safe.</li>
     </ul>
     <p class="help-foot">Otherwise: poke at it &mdash; it's meant to be explored.</p>
     <button id="help-close">Close</button>

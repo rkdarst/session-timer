@@ -28,10 +28,10 @@ MAX_CSV_UPLOAD_BYTES = 1_000_000
 
 # ----------------------------------------------------------- sessions
 MAX_SESSIONS = 1024
-# DESIGN.md: expire after 31 days idle.
-SESSION_EXPIRY_SECONDS = 31 * 24 * 3600
 # When the session cap is hit, only sessions idle at least this long
 # may be evicted to free a slot; otherwise creation is refused.
+# (Memory stays bounded by the caps alone — 1024 sessions x 128 events —
+# so there is no separate time-based expiry pass.)
 SESSION_EVICTION_IDLE_SECONDS = 3600
 
 # ------------------------------------------------- persistence (opt-in)

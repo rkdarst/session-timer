@@ -2,7 +2,7 @@
 
 This is a web-based session timer, that has a web server that can accept multiple clients at different `/name` URLs.  Pages are responsive, and changes instantly sync to the server.
 
-As a basic usage, there is a web timer for one event that counts down until an admin resets the timer (admin mode shortcut for one event).  However, there is support for pre-programming multiple events and each counts down, and once a new event starts, the old one disappears from the display view.  This way a session organizer can pre-plan the day and the timer runs automatically.  Sessions expire 31 days after last use (or of course on server restart).
+As a basic usage, there is a web timer for one event that counts down until an admin resets the timer (admin mode shortcut for one event).  However, there is support for pre-programming multiple events and each counts down, and once a new event starts, the old one disappears from the display view.  This way a session organizer can pre-plan the day and the timer runs automatically.  Sessions live until the server restarts (or until they are evicted to free a slot when the session cap fills).
 
 
 ## Data model
@@ -183,11 +183,11 @@ store.
 Limits (see `session_timer/config.py`): session names are at most 128
 ASCII characters; event names at most 128 characters; a session holds
 at most 128 events (larger adds/CSV uploads are rejected); at most 1024
-sessions are kept — when the cap is hit, an immediate expiry pass runs,
-then only sessions idle for over an hour are evicted oldest-first, and
-if nothing qualifies, new sessions are refused with 503 (a live session
-is never evicted).  Durations are at most 24 hours; CSV uploads are
-capped at 1 MB (rejected with 413).
+sessions are kept — when the cap is hit, only sessions idle for over an
+hour are evicted oldest-first, and if nothing qualifies, new sessions
+are refused with 503 (a live session is never evicted).  Durations are
+at most 24 hours; request bodies and CSV uploads are capped at 1 MB
+(rejected with 413).
 
 Hardening: every response carries X-Content-Type-Options: nosniff
 and Referrer-Policy: no-referrer; framing is deliberately *not*

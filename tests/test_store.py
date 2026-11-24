@@ -333,17 +333,18 @@ def test_session_cap_evicts_idle_oldest_first():
     assert len(store.sessions) == 1024
 
 
-def test_session_cap_eviction_runs_expiry_first():
+def test_session_cap_eviction():
     store = SessionStore()
     for i in range(1024):
         store.get_or_create(f"s{i:04d}")
-    # one session long expired, but still "recent" enough to evade the
-    # eviction idle cutoff — the expiry pass inside get_or_create
-    # must free it anyway
-    store.sessions["s0420"].last_used -= 40 * 24 * 3600
+    # make exactly two sessions eviction-eligible (idle > 1 h)
+    store.sessions["s0000"].last_used -= 7200
+    store.sessions["s0001"].last_used -= 3601
     store.get_or_create("fresh")
-    assert "s0420" not in store.sessions
     assert "fresh" in store.sessions
+    assert "s0000" not in store.sessions  # oldest idle evicted first
+    assert "s0001" in store.sessions      # only one slot was needed
+    assert len(store.sessions) == 1024
 
 
 # ------------------------------------------------- snapshot persistence
@@ -627,19 +628,6 @@ def test_update_event_remaining_requires_now():
     session = make_session(("a", 100, 10))
     with pytest.raises(ValueError):
         session.update_event(session.events[0].id, remaining=60)
-
-
-# ------------------------------------------------------------- expiry
-
-
-def test_expire():
-    store = SessionStore()
-    store.get_or_create("old")
-    store.sessions["old"].last_used = 0.0
-    store.get_or_create("new")
-    assert store.expire(max_age_seconds=100, now=1000.0) == ["old"]
-    assert store.get("old") is None
-    assert store.get("new") is not None
 
 
 # ------------------------------------------------- audit regressions
